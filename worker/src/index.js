@@ -893,7 +893,9 @@ async function generateAiVerdict(summary, names, tone, insights, env) {
     "Do not imply stats that are not explicitly provided.",
     "Never mention first deaths, first blood, or 'first death' language.",
     "Never mention ultimates, ults, or cooldowns.",
-    "Never mention crowns; say wins or first place instead.",
+    "Never mention crowns; say top-4 wins or first place instead.",
+    "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition.",
+    "Avoid 'inting', 'feeding', slurs, or direct insults.",
     "Use deaths only if facts.deaths is present.",
     "Tank share indicates damage taken; support share indicates healing + shielding.",
     "2-4 sentences, banter not toxic, no profanity or slurs.",
@@ -1084,7 +1086,9 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
     "Do not use comparative claims unless the exact percentage is provided.",
     "Never mention first deaths, first blood, or 'first death' language.",
     "Never mention ultimates, ults, or cooldowns.",
-    "Never mention crowns; say wins or first place instead.",
+    "Never mention crowns; say top-4 wins or first place instead.",
+    "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition.",
+    "Avoid 'inting', 'feeding', slurs, or direct insults.",
     "Use deaths only if facts.deaths is present.",
     "Only mention combat share stats if facts.availability.combatShares is true.",
     "Tank share signals frontline work; support share is healing + shielding. Don't frame tank share as bad unless impact is low.",
@@ -1165,7 +1169,9 @@ async function generateAiMoments(summary, names, tone, matches, env) {
     "Each moment is 2-8 words, lowercase, no profanity, no slurs.",
     "Never mention first deaths, first blood, or 'first death' language.",
     "Never mention ultimates, ults, or cooldowns.",
-    "Never mention crowns; say wins or first place instead.",
+    "Never mention crowns; say top-4 wins or first place instead.",
+    "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition.",
+    "Avoid 'inting', 'feeding', slurs, or direct insults.",
     "Use the provided hint and placement to keep meaning consistent.",
     "Avoid 'ticket' phrases like 'ticket punched'.",
     "If you mention champions, include both. Prefer the exact pairLabel string.",
@@ -1577,30 +1583,62 @@ function buildHighlight(me, duo, placement, seed) {
     add("first place locked");
     add("top spot claimed");
     add("win secured");
+    add("clutch finish");
   } else if (placement > 0 && placement <= 4) {
     add("top 4 secured");
     add("made the cut");
     add("survived the bracket");
     add("top 4 locked");
     add("kept the run alive");
+    add("clutch survive");
   } else if (placement >= 5) {
     add("bottom 4 exit");
     add("early exit");
     add("short run");
     add("lobby ended the run");
     add("bracket collapsed");
+    add("early throw");
   }
 
-  if (kills >= deaths + 8) add("out-traded the lobby");
-  if (deaths >= kills + 8) add("scrapped hard, fell short");
-  if (damage >= damageTaken * 1.3 && damage >= 18000) add("damage diff posted");
-  if (damageTaken >= damage * 1.3 && damageTaken >= 20000) add("frontline tax paid");
+  if (kills >= deaths + 8) {
+    add("out-traded the lobby");
+    add("carry mode online");
+    add("hands diff");
+    add("snowball started");
+  }
+  if (deaths >= kills + 8) {
+    add("scrapped hard, fell short");
+    add("snowballed on");
+    add("gap opened up");
+  }
+  if (damage >= damageTaken * 1.3 && damage >= 18000) {
+    add("damage diff posted");
+    add("burst comp online");
+    add("dps diff");
+  }
+  if (damageTaken >= damage * 1.3 && damageTaken >= 20000) {
+    add("frontline tax paid");
+    add("frontline soak");
+    add("statcheck attempt");
+  }
   if (assists >= kills + 8) add("setup for days");
   if (kills >= assists + 8) add("finisher instincts");
-  if (support >= 9000) add("sustain clinic");
-  if (placement <= 4 && deaths > kills) add("survived the chaos");
-  if (placement >= 5 && kills > deaths) add("could not close the trades");
-  if (lowItems && placement >= 5) add("build never came online");
+  if (support >= 9000) {
+    add("sustain clinic");
+    add("sustain comp online");
+  }
+  if (placement <= 4 && deaths > kills) {
+    add("survived the chaos");
+    add("clutch round");
+  }
+  if (placement >= 5 && kills > deaths) {
+    add("could not close the trades");
+    add("threw the lead");
+  }
+  if (lowItems && placement >= 5) {
+    add("build never came online");
+    if (anvilChamp) add("gamba stalled");
+  }
   if (anvilChamp && placement >= 6) add("anvil run stalled");
 
   if (candidates.length === 0) {
@@ -1618,16 +1656,16 @@ function toneCopy(tone) {
       deathTie: "deaths are split almost evenly. shared pain, shared growth.",
       comfortTie: (pick) => `${pick} appears on both sides. comfort pick energy.`,
       comfortLead: (pick, rate) => `${pick} shows up in ${rate}. leaning into what feels safe.`,
-      damageLead: (leader, share) => `${leader} handles ${formatPercent(share)} of duo damage. steady carry energy.`,
+      damageLead: (leader, share) => `${leader} handles ${formatPercent(share)} of duo damage. carry energy online.`,
       damageTie: "damage is split almost evenly. shared workload, shared glory.",
-      tankLead: (leader, share) => `${leader} absorbs ${formatPercent(share)} of the damage. frontline heart.`,
-      supportLead: (leader, share) => `${leader} covers ${formatPercent(share)} of healing + shielding. lifeguard energy.`,
+      tankLead: (leader, share) => `${leader} absorbs ${formatPercent(share)} of the damage. frontline heart, statcheck vibes.`,
+      supportLead: (leader, share) => `${leader} covers ${formatPercent(share)} of healing + shielding. sustain comp energy.`,
       supportTie: "healing + shielding is split evenly. shared sustain.",
       assistLead: (leader, share) => `${leader} owns ${formatPercent(share)} of the assists. setup artist energy.`,
       killLead: (leader, share) => `${leader} claims ${formatPercent(share)} of the kills. finisher instincts.`,
-      deathLead: (leader, share) => `${leader} holds ${formatPercent(share)} of the deaths. brave positioning.`,
-      streakHot: (streak) => `top 4 streak hit ${streak}. momentum is real.`,
-      streakCold: (streak) => `bottom 4 streak hit ${streak}. the lobby has been rough.`,
+      deathLead: (leader, share) => `${leader} holds ${formatPercent(share)} of the deaths. death gap noticed.`,
+      streakHot: (streak) => `top 4 streak hit ${streak}. snowball energy building.`,
+      streakCold: (streak) => `bottom 4 streak hit ${streak}. tilted vibes creeping in.`,
       champPoolSmall: (count) => `only ${count} champions in rotation. comfort zone cozy.`,
       champPoolWide: (count) => `${count} champions across the scan. variety pack energy.`,
       crownCount: (firsts) => `${firsts} first-place finishes on the shelf.`,
@@ -1638,23 +1676,23 @@ function toneCopy(tone) {
       clutch: (summary) => {
         const firsts = formatFirsts(summary.firsts);
         const prefix = smallSamplePrefix(summary.games);
-        return `top 4 rate sits at ${formatPercent(summary.winRate)} with ${firsts}. ${prefix}the duo feels ${summary.winRate >= 0.55 ? "steady" : "swingy"}.`;
+        return `top 4 rate sits at ${formatPercent(summary.winRate)} with ${firsts}. ${prefix}the duo feels ${summary.winRate >= 0.55 ? "steady" : "swingy"}, clutch moments pending.`;
       }
     },
     classic: {
       deathTie: "deaths are split down the middle. shared suffering, shared blame.",
       comfortTie: (pick) => `${pick} shows up in both rotations. shared comfort pick energy.`,
       comfortLead: (pick, rate) => `${pick} shows up in ${rate}. comfort pick or lifestyle choice.`,
-      damageLead: (leader, share) => `${leader} deals ${formatPercent(share)} of duo damage. backpack tax applied.`,
+      damageLead: (leader, share) => `${leader} deals ${formatPercent(share)} of duo damage. carry tax applied.`,
       damageTie: "damage is split down the middle. shared workload, shared blame.",
-      tankLead: (leader, share) => `${leader} absorbs ${formatPercent(share)} of incoming damage. frontline tax payer.`,
-      supportLead: (leader, share) => `${leader} handles ${formatPercent(share)} of healing + shielding. support diff noted.`,
+      tankLead: (leader, share) => `${leader} absorbs ${formatPercent(share)} of incoming damage. statcheck tax payer.`,
+      supportLead: (leader, share) => `${leader} handles ${formatPercent(share)} of healing + shielding. sustain comp noted.`,
       supportTie: "healing + shielding is split down the middle. shared sustain.",
       assistLead: (leader, share) => `${leader} owns ${formatPercent(share)} of the assists. setup artist energy.`,
       killLead: (leader, share) => `${leader} takes ${formatPercent(share)} of the kills. finisher aura.`,
-      deathLead: (leader, share) => `${leader} holds ${formatPercent(share)} of the deaths. grey screen familiar.`,
-      streakHot: (streak) => `top 4 streak hit ${streak}. the duo can chain wins.`,
-      streakCold: (streak) => `bottom 4 streak hit ${streak}. the lobby took turns.`,
+      deathLead: (leader, share) => `${leader} holds ${formatPercent(share)} of the deaths. death gap certified.`,
+      streakHot: (streak) => `top 4 streak hit ${streak}. snowball forming.`,
+      streakCold: (streak) => `bottom 4 streak hit ${streak}. tilted streak unlocked.`,
       champPoolSmall: (count) => `only ${count} champions in rotation. comfort zone locked.`,
       champPoolWide: (count) => `${count} champs across the scan. variety pack duo.`,
       crownCount: (firsts) => `${firsts} first-place finishes on the shelf.`,
@@ -1665,23 +1703,23 @@ function toneCopy(tone) {
       clutch: (summary) => {
         const firsts = formatFirsts(summary.firsts);
         const prefix = smallSamplePrefix(summary.games);
-        return `top 4 rate sits at ${formatPercent(summary.winRate)} with ${firsts}. ${prefix}the duo looks ${summary.winRate >= 0.55 ? "dangerous" : "swingy"}.`;
+        return `top 4 rate sits at ${formatPercent(summary.winRate)} with ${firsts}. ${prefix}the duo looks ${summary.winRate >= 0.55 ? "dangerous" : "swingy"}, clutch window open.`;
       }
     },
     savage: {
       deathTie: "deaths are split evenly. equal opportunity pain.",
       comfortTie: (pick) => `${pick} appears on both sides. commitment level: unshakable.`,
       comfortLead: (pick, rate) => `${pick} shows up in ${rate}. one-pick lifestyle confirmed.`,
-      damageLead: (leader, share) => `${leader} delivers ${formatPercent(share)} of duo damage. backpack surcharge applied.`,
+      damageLead: (leader, share) => `${leader} delivers ${formatPercent(share)} of duo damage. carry diff online.`,
       damageTie: "damage is split evenly. co-op blame agreement signed.",
-      tankLead: (leader, share) => `${leader} absorbs ${formatPercent(share)} of the damage. frontline tax paid in full.`,
-      supportLead: (leader, share) => `${leader} handles ${formatPercent(share)} of healing + shielding. support diff confirmed.`,
+      tankLead: (leader, share) => `${leader} absorbs ${formatPercent(share)} of the damage. statcheck bill paid.`,
+      supportLead: (leader, share) => `${leader} handles ${formatPercent(share)} of healing + shielding. sustain comp confirmed.`,
       supportTie: "healing + shielding split evenly. no carry in sight.",
       assistLead: (leader, share) => `${leader} owns ${formatPercent(share)} of the assists. setup bot energy.`,
       killLead: (leader, share) => `${leader} takes ${formatPercent(share)} of the kills. finisher privileges.`,
-      deathLead: (leader, share) => `${leader} holds ${formatPercent(share)} of the deaths. grey screen loyalist.`,
-      streakHot: (streak) => `top 4 streak hit ${streak}. hot streak unlocked.`,
-      streakCold: (streak) => `bottom 4 streak hit ${streak}. spiral lore unlocked.`,
+      deathLead: (leader, share) => `${leader} holds ${formatPercent(share)} of the deaths. death gap certified.`,
+      streakHot: (streak) => `top 4 streak hit ${streak}. snowball unlocked.`,
+      streakCold: (streak) => `bottom 4 streak hit ${streak}. tilted spiral unlocked.`,
       champPoolSmall: (count) => `only ${count} champions in rotation. comfort cage secured.`,
       champPoolWide: (count) => `${count} champions across the scan. chaos buffet.`,
       crownCount: (firsts) => `${firsts} first-place finishes in the cabinet. still room for more.`,
@@ -1692,7 +1730,7 @@ function toneCopy(tone) {
       clutch: (summary) => {
         const firsts = formatFirsts(summary.firsts);
         const prefix = smallSamplePrefix(summary.games);
-        return `top 4 rate sits at ${formatPercent(summary.winRate)} with ${firsts}. ${prefix}the duo looks ${summary.winRate >= 0.55 ? "dangerous" : "chaotic"}.`;
+        return `top 4 rate sits at ${formatPercent(summary.winRate)} with ${firsts}. ${prefix}the duo looks ${summary.winRate >= 0.55 ? "dangerous" : "chaotic"}, clutch window open.`;
       }
     }
   };
