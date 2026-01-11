@@ -24,13 +24,6 @@
       --warn: #f0c27b;
       --danger: #e965a5;
       --shadow: rgba(0, 0, 0, 0.35);
-      --tier-poor: #9d9d9d;
-      --tier-common: #ffffff;
-      --tier-uncommon: #1eff00;
-      --tier-rare: #0070dd;
-      --tier-epic: #a335ee;
-      --tier-legendary: #ff8000;
-      --tier-artifact: #e6cc80;
     }
     * { box-sizing: border-box; }
     body {
@@ -198,6 +191,26 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
     }
+    .stat.feature {
+      border-color: rgba(179, 244, 243, 0.55);
+      box-shadow: 0 10px 24px rgba(179, 244, 243, 0.12);
+    }
+    .stat.feature .stat-value {
+      font-size: 22px;
+      color: var(--accent);
+    }
+    .stat-flag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+    }
     .stat {
       padding: 12px;
       border-radius: 10px;
@@ -343,11 +356,11 @@
       align-items: center;
       gap: 4px;
     }
-    .champ-name.tier-s { color: var(--tier-legendary); }
-    .champ-name.tier-a { color: var(--tier-epic); }
-    .champ-name.tier-b { color: var(--tier-rare); }
-    .champ-name.tier-c { color: var(--tier-uncommon); }
-    .champ-name.tier-d { color: var(--tier-poor); }
+    .champ-name.tier-s { color: var(--accent); }
+    .champ-name.tier-a { color: var(--accent-3); }
+    .champ-name.tier-b { color: var(--warn); }
+    .champ-name.tier-c { color: var(--muted); }
+    .champ-name.tier-d { color: var(--line); }
     .verdict {
       font-size: 14px;
       line-height: 1.7;
@@ -507,7 +520,7 @@
           <div class="stat-value" id="stat-games">--</div>
           <div class="stat-sub" id="stat-games-sub">last 25 arena games</div>
         </div>
-        <div class="stat">
+        <div class="stat feature">
           <div class="stat-label">top 4 rate</div>
           <div class="stat-value" id="stat-winrate">--</div>
           <div class="stat-sub" id="stat-winrate-sub">top 4 / bottom 4</div>
@@ -1055,7 +1068,7 @@
       statGames.textContent = summary.games + " games";
       statGamesSub.textContent = "last " + meta.matchCount + " arena games";
       statWinrate.textContent = formatPercent(summary.winRate);
-      statWinrateSub.textContent = summary.wins + " top 4 / " + (summary.games - summary.wins) + " bottom 4 · " + safeFirsts + " firsts";
+      statWinrateSub.innerHTML = `${summary.wins} top 4 / ${summary.games - summary.wins} bottom 4 · <span class="stat-flag">${safeFirsts} crowns</span>`;
       const deathSummary = shareSummary(shares.deaths, meta.duo);
       const deathsTotal = (insights.deaths?.me || 0) + (insights.deaths?.duo || 0);
       statFirst.innerHTML = highlightNames(deathSummary.leader, meta.duo);
