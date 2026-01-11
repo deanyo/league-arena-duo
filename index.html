@@ -611,6 +611,8 @@
         wins: 13,
         winRate: 0.59,
         avgPlacement: 2.4,
+        firsts: 4,
+        firstRate: "18%",
         firstDeaths: { me: 5, duo: 9 },
         unusedUlts: { me: 2, duo: 6 },
         comfortBias: "MichyeoHEY",
@@ -635,7 +637,7 @@
         { result: "loss", placement: 3, champs: "lucian + jinx", highlight: "ultimates saved for next game" },
         { result: "win", placement: 1, champs: "vi + jinx", highlight: "level 2 all-in success" }
       ],
-      verdict: "the duo looks like it is winning more than it loses, but only just. hugegamer brings the confidence spike, MichyeoHEY brings the comfort picks, and riot brings the chaos. small sample size, but the vibe says you are one good augment roll away from dominance."
+      verdict: "the duo looks like it is landing top 4 more than it misses, with 4 first-place finishes. hugegamer brings the confidence spike, MichyeoHEY brings the comfort picks, and riot brings the chaos. small sample size, but the vibe says you are one good augment roll away from dominance."
     };
 
     function setStatus(text, tone) {
@@ -727,7 +729,7 @@
       statGames.textContent = summary.games + " games";
       statGamesSub.textContent = "last " + meta.matchCount + " arena games";
       statWinrate.textContent = formatPercent(summary.winRate);
-      statWinrateSub.textContent = summary.wins + " top 4 / " + (summary.games - summary.wins) + " bottom 4";
+      statWinrateSub.textContent = summary.wins + " top 4 / " + (summary.games - summary.wins) + " bottom 4 · " + summary.firsts + " firsts";
       const firstLeader = leaderLabel(summary.firstDeaths.me, summary.firstDeaths.duo, meta.duo.me, meta.duo.duo);
       statFirst.innerHTML = highlightNames(firstLeader, meta.duo);
       statFirstSub.innerHTML = highlightNames(meta.duo.me + " " + summary.firstDeaths.me + " vs " + meta.duo.duo + " " + summary.firstDeaths.duo, meta.duo);
