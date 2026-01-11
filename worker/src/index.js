@@ -896,7 +896,7 @@ async function generateAiVerdict(summary, names, tone, insights, env) {
     "Never mention ultimates, ults, or cooldowns.",
     "Never mention crowns; say top-4 wins or first place instead.",
     "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition, inting, feeding.",
-    "No slurs or hateful language. Keep it playful, not personal."
+    "No slurs or hateful language. Keep it playful, not personal.",
     "Use deaths only if facts.deaths is present.",
     "Tank share indicates damage taken; support share indicates healing + shielding.",
     "2-4 sentences, banter not toxic, no profanity or slurs.",
@@ -1091,7 +1091,7 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
     "Never mention ultimates, ults, or cooldowns.",
     "Never mention crowns; say top-4 wins or first place instead.",
     "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition, inting, feeding.",
-    "No slurs or hateful language. Keep it playful, not personal."
+    "No slurs or hateful language. Keep it playful, not personal.",
     "Use deaths only if facts.deaths is present.",
     "Only mention combat share stats if facts.availability.combatShares is true.",
     "Tank share signals frontline work; support share is healing + shielding. Don't frame tank share as bad unless impact is low.",
@@ -1174,7 +1174,7 @@ async function generateAiMoments(summary, names, tone, matches, env) {
     "Never mention ultimates, ults, or cooldowns.",
     "Never mention crowns; say top-4 wins or first place instead.",
     "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition, inting, feeding.",
-    "No slurs or hateful language. Keep it playful, not personal."
+    "No slurs or hateful language. Keep it playful, not personal.",
     "Use the provided hint and placement to keep meaning consistent.",
     "Avoid 'ticket' phrases like 'ticket punched'.",
     "If you mention champions, include both. Prefer the exact pairLabel string.",
@@ -1695,7 +1695,7 @@ function toneCopy(tone) {
       supportTie: "healing + shielding is split down the middle. shared sustain.",
       assistLead: (leader, share) => `${leader} owns ${formatPercent(share)} of the assists. setup artist energy.`,
       killLead: (leader, share) => `${leader} takes ${formatPercent(share)} of the kills. finisher aura.`,
-      deathLead: (leader, share) => `${leader} holds ${formatPercent(share)} of the deaths. death gap certified.`,
+      deathLead: (leader, share) => `${leader} holds ${formatPercent(share)} of the deaths. death gap certified, feeding streak.`,
       streakHot: (streak) => `top 4 streak hit ${streak}. snowball forming.`,
       streakCold: (streak) => `bottom 4 streak hit ${streak}. tilted streak unlocked.`,
       champPoolSmall: (count) => `only ${count} champions in rotation. comfort zone locked.`,
