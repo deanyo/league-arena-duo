@@ -675,19 +675,19 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
   return parsed.roasts;
 }
 
-async function getAiRoasts(summary, names, tone, insights, fallback, env, ctx, url) {
+async function getAiRoasts(summary, names, tone, insights, fallback, env, ctx, url, options = {}) {
   if (!env.OPENAI_API_KEY) {
-    return { roasts: fallback, source: "ai-fallback" };
+    return { roasts: fallback, source: "ai-fallback", error: options.debug ? "missing OPENAI_API_KEY" : undefined };
   }
   if (!insights) {
-    return { roasts: fallback, source: "ai-fallback" };
+    return { roasts: fallback, source: "ai-fallback", error: options.debug ? "missing insights" : undefined };
   }
   const noCombatStats = (insights.damage?.total || 0) === 0
     && (insights.kills?.total || 0) === 0
     && (insights.assists?.total || 0) === 0
     && (insights.deaths?.total || 0) === 0;
   if (noCombatStats) {
-    return { roasts: fallback, source: "ai-fallback" };
+    return { roasts: fallback, source: "ai-fallback", error: options.debug ? "insights missing combat stats" : undefined };
   }
 
   const ttl = safeNumber(env.AI_ROASTS_TTL_SECONDS, 86400);
@@ -718,9 +718,9 @@ async function getAiRoasts(summary, names, tone, insights, fallback, env, ctx, u
       }
     });
     ctx.waitUntil(cache.put(cacheKey, cacheResponse.clone()));
-    return { roasts, source };
+    return { roasts, source, error: options.debug ? null : undefined };
   } catch (error) {
-    return { roasts: fallback, source: "ai-fallback" };
+    return { roasts: fallback, source: "ai-fallback", error: options.debug ? (error.message || "ai roasts error") : undefined };
   }
 }
 
@@ -1643,7 +1643,7 @@ async function handleDuo(req, env, ctx) {
   return response;
 }
 
-async function handleDebug(req, env) {
+async function handleDebug(req, env, ctx) {
   const url = new URL(req.url);
   const region = normalizeRegion(url.searchParams.get("region"), env.DEFAULT_REGION || "euw");
   const platform = PLATFORM_BY_REGION[region];
@@ -1675,6 +1675,49 @@ async function handleDebug(req, env) {
     }
   }
 
+  if (url.searchParams.get("ai") === "roasts") {
+    const tone = normalizeTone(url.searchParams.get("tone"));
+    const meInput = normalizeName(url.searchParams.get("me"), env.DEFAULT_ME || "hugegamer-EUW");
+    const duoInput = normalizeName(url.searchParams.get("duo"), env.DEFAULT_DUO || "MichyeoHEY-EUW");
+    const matches = Math.min(50, Math.max(5, safeNumber(url.searchParams.get("matches"), Number(env.DEFAULT_MATCHES) || 25)));
+    const debugUrl = new URL(url.origin + "/duo");
+    debugUrl.searchParams.set("region", region);
+    debugUrl.searchParams.set("me", meInput);
+    debugUrl.searchParams.set("duo", duoInput);
+    debugUrl.searchParams.set("matches", String(matches));
+    debugUrl.searchParams.set("tone", tone);
+    debugUrl.searchParams.set("verdict", "auto");
+
+    try {
+      const duoResponse = await handleDuo(new Request(debugUrl.toString(), req), env, ctx);
+      const duoData = await duoResponse.json();
+      const insights = duoData.insights || buildFallbackInsights(duoData.summary, duoData.matches || []);
+      const metaStats = insights.meta || null;
+      const roastsAuto = buildRoasts(duoData.summary, duoData.meta.duo, tone, metaStats, insights);
+      const aiRoasts = await getAiRoasts(
+        duoData.summary,
+        duoData.meta.duo,
+        tone,
+        insights,
+        roastsAuto,
+        env,
+        ctx,
+        url,
+        { debug: true }
+      );
+      payload.aiRoasts = {
+        source: aiRoasts.source,
+        error: aiRoasts.error || null,
+        sample: aiRoasts.roasts
+      };
+    } catch (error) {
+      payload.aiRoasts = {
+        source: "ai-fallback",
+        error: error.message || "ai roasts debug error"
+      };
+    }
+  }
+
   return jsonResponse(payload, 200);
 }
 
@@ -1687,7 +1730,7 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === "/debug") {
       try {
-        return await handleDebug(req, env);
+        return await handleDebug(req, env, ctx);
       } catch (error) {
         return jsonResponse({ error: error.message || "Debug error" }, 500);
       }
