@@ -390,11 +390,11 @@
           </label>
           <label class="field">
             <span>summoner</span>
-            <input id="summoner-a" placeholder="example: deanyo">
+            <input id="summoner-a" placeholder="example: hugegamer">
           </label>
           <label class="field">
             <span>duo</span>
-            <input id="summoner-b" placeholder="example: cerri">
+            <input id="summoner-b" placeholder="example: MichyeoHEY">
           </label>
           <label class="field">
             <span>matches to scan</span>
@@ -427,7 +427,7 @@
           <button class="btn" type="reset" id="reset-btn">reset</button>
         </div>
       </form>
-      <div class="hint" id="url-hint">share link: /?me=deanyo&duo=cerri&region=euw</div>
+      <div class="hint" id="url-hint">share link: /?me=hugegamer&duo=MichyeoHEY&region=euw</div>
     </section>
 
     <section class="panel" style="animation-delay: 0.1s;">
@@ -543,8 +543,8 @@
     const API_BASE = "https://league-arena-duo.deanryanit.workers.dev";
     const DEFAULTS = {
       region: "euw",
-      me: "deanyo",
-      duo: "cerri",
+      me: "hugegamer",
+      duo: "MichyeoHEY",
       matches: "25",
       tone: "classic",
       verdict: "auto"
@@ -594,7 +594,7 @@
         source: "demo",
         updatedAt: "just now",
         matchCount: 25,
-        duo: { me: "deanyo", duo: "cerri", region: "euw" }
+        duo: { me: "hugegamer", duo: "MichyeoHEY", region: "euw" }
       },
       summary: {
         games: 22,
@@ -603,7 +603,7 @@
         avgPlacement: 2.4,
         firstDeaths: { me: 5, duo: 9 },
         unusedUlts: { me: 2, duo: 6 },
-        comfortBias: "cerri",
+        comfortBias: "MichyeoHEY",
         comfortPick: "jinx",
         duoIdentity: "all-in adventurers"
       },
@@ -613,10 +613,10 @@
         riot: { share: 0.25, reason: "augment rng with opinions" }
       },
       roasts: [
-        { title: "first death trophy", body: "cerri is first down in 41% of rounds. the data suggests early enthusiasm." },
-        { title: "ult hoarder", body: "6 rounds ended with cerri still holding ultimate. historic preservation society." },
+        { title: "first death trophy", body: "MichyeoHEY is first down in 41% of rounds. the data suggests early enthusiasm." },
+        { title: "ult hoarder", body: "6 rounds ended with MichyeoHEY still holding ultimate. historic preservation society." },
         { title: "comfort lock", body: "jinx shows up in every other match. comfort pick or lifestyle choice." },
-        { title: "clutch moments", body: "deanyo secures the last takedown in 8 rounds. hero arc confirmed." }
+        { title: "clutch moments", body: "hugegamer secures the last takedown in 8 rounds. hero arc confirmed." }
       ],
       matches: [
         { result: "win", placement: 1, champs: "yasuo + jinx", highlight: "double execute to close" },
@@ -625,7 +625,7 @@
         { result: "loss", placement: 3, champs: "lucian + jinx", highlight: "ultimates saved for next game" },
         { result: "win", placement: 1, champs: "vi + jinx", highlight: "level 2 all-in success" }
       ],
-      verdict: "the duo looks like it is winning more than it loses, but only just. deanyo brings the confidence spike, cerri brings the comfort picks, and riot brings the chaos. small sample size, but the vibe says you are one good augment roll away from dominance."
+      verdict: "the duo looks like it is winning more than it loses, but only just. hugegamer brings the confidence spike, MichyeoHEY brings the comfort picks, and riot brings the chaos. small sample size, but the vibe says you are one good augment roll away from dominance."
     };
 
     function setStatus(text, tone) {

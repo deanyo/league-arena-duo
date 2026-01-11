@@ -249,8 +249,8 @@ async function handleDuo(req, env, ctx) {
 
   const url = new URL(req.url);
   const region = normalizeRegion(url.searchParams.get("region"), env.DEFAULT_REGION || "euw");
-  const meInput = normalizeName(url.searchParams.get("me"), env.DEFAULT_ME || "deanyo");
-  const duoInput = normalizeName(url.searchParams.get("duo"), env.DEFAULT_DUO || "cerri");
+  const meInput = normalizeName(url.searchParams.get("me"), env.DEFAULT_ME || "hugegamer");
+  const duoInput = normalizeName(url.searchParams.get("duo"), env.DEFAULT_DUO || "MichyeoHEY");
   const matches = Math.min(50, Math.max(5, safeNumber(url.searchParams.get("matches"), Number(env.DEFAULT_MATCHES) || 25)));
 
   const platform = PLATFORM_BY_REGION[region];
