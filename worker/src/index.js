@@ -783,9 +783,11 @@ async function getAiRoasts(summary, names, tone, insights, fallback, env, ctx, u
   }
 
   const ttl = safeNumber(env.AI_ROASTS_TTL_SECONDS, 86400);
+  const version = env.AI_ROASTS_VERSION || "v1";
   const fingerprint = buildRoastFingerprint(summary, insights, tone);
   const cache = caches.default;
   const cacheUrl = new URL(url.origin + "/roasts/ai");
+  cacheUrl.searchParams.set("v", version);
   cacheUrl.searchParams.set("key", fingerprint);
   cacheUrl.searchParams.set("tone", tone);
   cacheUrl.searchParams.set("me", normalizeName(names.me, "").toLowerCase());
@@ -803,13 +805,15 @@ async function getAiRoasts(summary, names, tone, insights, fallback, env, ctx, u
     const rawRoasts = await generateAiRoasts(summary, names, tone, insights, env);
     const roasts = normalizeAiRoasts(rawRoasts, fallback);
     const source = roasts === fallback ? "ai-fallback" : "ai";
-    const cacheResponse = new Response(JSON.stringify({ roasts }), {
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": `public, max-age=${ttl}`
-      }
-    });
-    ctx.waitUntil(cache.put(cacheKey, cacheResponse.clone()));
+    if (source === "ai") {
+      const cacheResponse = new Response(JSON.stringify({ roasts }), {
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": `public, max-age=${ttl}`
+        }
+      });
+      ctx.waitUntil(cache.put(cacheKey, cacheResponse.clone()));
+    }
     return { roasts, source, error: options.debug ? null : undefined };
   } catch (error) {
     return { roasts: fallback, source: "ai-fallback", error: options.debug ? (error.message || "ai roasts error") : undefined };
