@@ -550,6 +550,25 @@ function normalizeAiRoasts(roasts, fallback) {
   if (!Array.isArray(roasts)) return fallback;
   const cleaned = [];
   const seen = new Set();
+  const categorize = (roast) => {
+    const title = String(roast?.title || "").toLowerCase();
+    const body = String(roast?.body || "").toLowerCase();
+    const text = `${title} ${body}`;
+    if (text.includes("meta") || text.includes("tier")) return "meta";
+    if (text.includes("death")) return "death";
+    if (text.includes("streak")) return "streak";
+    if (text.includes("comfort") || text.includes("pick")) return "comfort";
+    if (text.includes("damage")) return "damage";
+    if (text.includes("tank") || text.includes("frontline")) return "tank";
+    if (text.includes("healing") || text.includes("shield") || text.includes("support")) return "support";
+    if (text.includes("anvil")) return "anvil";
+    if (text.includes("items") || text.includes("inventory")) return "items";
+    if (text.includes("champion pool") || text.includes("variety")) return "champion";
+    if (text.includes("top 4") || text.includes("first place") || text.includes("top spot")) return "top4";
+    if (text.includes("assist")) return "assist";
+    if (text.includes("kill")) return "kill";
+    return "misc";
+  };
   roasts.forEach((roast) => {
     const title = collapseWhitespace(roast?.title || "");
     const body = collapseWhitespace(roast?.body || "");
@@ -560,7 +579,26 @@ function normalizeAiRoasts(roasts, fallback) {
     cleaned.push({ title: title.toLowerCase(), body });
   });
   if (cleaned.length < 3) return fallback;
-  return cleaned.slice(0, 4);
+  const selected = [];
+  const usedCats = new Set();
+  cleaned.forEach((roast) => {
+    if (selected.length >= 4) return;
+    const cat = categorize(roast);
+    if (usedCats.has(cat)) return;
+    usedCats.add(cat);
+    selected.push(roast);
+  });
+  if (selected.length < 4 && Array.isArray(fallback)) {
+    fallback.forEach((roast) => {
+      if (selected.length >= 4) return;
+      const cat = categorize(roast);
+      if (usedCats.has(cat)) return;
+      usedCats.add(cat);
+      selected.push(roast);
+    });
+  }
+  if (selected.length < 3) return fallback;
+  return selected.slice(0, 4);
 }
 
 function normalizeAiMoments(moments, fallback, matches) {
@@ -580,13 +618,17 @@ function normalizeAiMoments(moments, fallback, matches) {
       "{pair} locked the win",
       "{pair} grabbed top spot",
       "{pair} sealed the win",
+      "{pair} finished on top",
+      "{pair} took the top spot",
       "top spot secured",
       "first place locked",
       "win secured",
       "top spot claimed",
       "first place confirmed",
       "first place clinched",
-      "win stamped"
+      "win stamped",
+      "top spot sealed",
+      "first place sealed"
     ],
     top4: [
       "{pair} ran deep",
@@ -594,6 +636,9 @@ function normalizeAiMoments(moments, fallback, matches) {
       "{pair} stayed alive",
       "{pair} scraped through",
       "{pair} survived the bracket",
+      "{pair} hung on late",
+      "{pair} kept it alive",
+      "{pair} made late rounds",
       "made the cut",
       "survived the bracket",
       "kept the run alive",
@@ -603,7 +648,13 @@ function normalizeAiMoments(moments, fallback, matches) {
       "late-round presence",
       "bracket survived",
       "top 4 secured",
-      "top 4 locked"
+      "top 4 locked",
+      "top 4 confirmed",
+      "top 4 saved",
+      "final four booked",
+      "final four secured",
+      "final four saved",
+      "late run saved"
     ],
     bottom4: [
       "{pair} bowed out early",
@@ -611,6 +662,9 @@ function normalizeAiMoments(moments, fallback, matches) {
       "{pair} fell out early",
       "{pair} cut short",
       "{pair} out before late rounds",
+      "{pair} missed late rounds",
+      "{pair} tapped out early",
+      "{pair} bounced early",
       "early exit",
       "short run",
       "lobby ended the run",
@@ -620,7 +674,12 @@ function normalizeAiMoments(moments, fallback, matches) {
       "quick exit",
       "closed out early",
       "early knockout",
-      "fast exit"
+      "fast exit",
+      "early bow",
+      "run clipped",
+      "bracket crumbled",
+      "early out",
+      "short-lived run"
     ],
     neutral: ["even trades, messy finish", "scrapped hard, fell short", "out-traded the lobby"]
   };
@@ -635,6 +694,14 @@ function normalizeAiMoments(moments, fallback, matches) {
     if (lower.includes("top 4")) return "top4";
     if (lower.includes("bottom 4")) return "bottom4";
     if (lower.includes("first place") || lower.includes("top spot") || lower.includes("win")) return "first";
+    if (lower.includes("surviv") || lower.includes("bracket")) return "survive";
+    if (lower.includes("made") || lower.includes("through") || lower.includes("cut")) return "made";
+    if (lower.includes("alive") || lower.includes("kept") || lower.includes("late")) return "alive";
+    if (lower.includes("early") || lower.includes("exit") || lower.includes("drop") || lower.includes("out")) return "early";
+    if (lower.includes("collapse") || lower.includes("crumbled") || lower.includes("clipped") || lower.includes("short")) return "collapse";
+    if (lower.includes("frontline")) return "frontline";
+    if (lower.includes("out-traded")) return "outtrade";
+    if (lower.includes("anvil")) return "anvil";
     return lower.replace(/[^a-z0-9\s]/g, " ").trim().split(/\s+/).slice(0, 2).join(" ");
   };
   const pushMoment = (text, match) => {
@@ -655,18 +722,27 @@ function normalizeAiMoments(moments, fallback, matches) {
     const resultType = match?.result || "neutral";
     const pool = pools[resultType] || pools.neutral;
     if (!pool.length) return "";
-    const start = Math.abs(seed || 0) % pool.length;
-    for (let i = 0; i < pool.length; i += 1) {
-      const candidate = pool[(start + i) % pool.length];
-      const pairLabel = match?.champs
-        ? String(match.champs || "").trim()
-        : Array.isArray(match?.champsTagged)
-          ? match.champsTagged.map(stripTierSuffix).join(" + ")
-          : "";
+    const pairLabel = match?.champs
+      ? String(match.champs || "").trim()
+      : Array.isArray(match?.champsTagged)
+        ? match.champsTagged.map(stripTierSuffix).join(" + ")
+        : "";
+    const preferPair = pairLabel
+      ? pool.filter((item) => item.includes("{pair}"))
+      : [];
+    const rest = pool.filter((item) => !item.includes("{pair}"));
+    const ordered = preferPair.concat(rest);
+    const start = Math.abs(seed || 0) % ordered.length;
+    for (let i = 0; i < ordered.length; i += 1) {
+      const candidate = ordered[(start + i) % ordered.length];
       const formatted = formatTemplate(candidate, pairLabel);
-      if (formatted && !used.has(formatted.toLowerCase())) return formatted;
+      if (!formatted) continue;
+      if (used.has(formatted.toLowerCase())) continue;
+      const key = momentKey(formatted);
+      if (key && usedKeys.has(key)) continue;
+      return formatted;
     }
-    return formatTemplate(pool[start], match?.champs || "");
+    return formatTemplate(ordered[start], pairLabel);
   };
   for (let i = 0; i < target; i += 1) {
     const candidate = cleaned[i];
@@ -1012,6 +1088,7 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
     "Use deaths only if facts.deaths is present.",
     "Only mention combat share stats if facts.availability.combatShares is true.",
     "Tank share signals frontline work; support share is healing + shielding. Don't frame tank share as bad unless impact is low.",
+    "Each roast must focus on a different aspect of performance.",
     "Avoid repeating the same fact across cards.",
     "Mention each player at least once across the set.",
     "Include a meta/off-meta card if meta data is present.",
@@ -1553,7 +1630,7 @@ function toneCopy(tone) {
       streakCold: (streak) => `bottom 4 streak hit ${streak}. the lobby has been rough.`,
       champPoolSmall: (count) => `only ${count} champions in rotation. comfort zone cozy.`,
       champPoolWide: (count) => `${count} champions across the scan. variety pack energy.`,
-      crownCount: (firsts) => `${firsts} first-place wins on the shelf.`,
+      crownCount: (firsts) => `${firsts} first-place finishes on the shelf.`,
       lowItems: (leader, rate) => `${leader} ends ${formatPercent(rate)} of games with 3 or fewer items. the build never shows up.`,
       anvilLead: (leader, rate, champ) => `${leader} runs the anvil economy in ${formatPercent(rate)} of games${champ ? ` on ${champ}` : ""}.`,
       anvilFail: (leader, champ) => `${leader} tried the anvil economy${champ ? ` on ${champ}` : ""} and still went bottom 4. financial advice revoked.`,
@@ -1580,7 +1657,7 @@ function toneCopy(tone) {
       streakCold: (streak) => `bottom 4 streak hit ${streak}. the lobby took turns.`,
       champPoolSmall: (count) => `only ${count} champions in rotation. comfort zone locked.`,
       champPoolWide: (count) => `${count} champs across the scan. variety pack duo.`,
-      crownCount: (firsts) => `${firsts} first-place wins on the shelf.`,
+      crownCount: (firsts) => `${firsts} first-place finishes on the shelf.`,
       lowItems: (leader, rate) => `${leader} ends ${formatPercent(rate)} of games with 3 or fewer items. the build never showed.`,
       anvilLead: (leader, rate, champ) => `${leader} runs the anvil economy in ${formatPercent(rate)} of games${champ ? ` on ${champ}` : ""}.`,
       anvilFail: (leader, champ) => `${leader} tried the anvil economy${champ ? ` on ${champ}` : ""} and still hit bottom 4. finance diff.`,
@@ -1607,7 +1684,7 @@ function toneCopy(tone) {
       streakCold: (streak) => `bottom 4 streak hit ${streak}. spiral lore unlocked.`,
       champPoolSmall: (count) => `only ${count} champions in rotation. comfort cage secured.`,
       champPoolWide: (count) => `${count} champions across the scan. chaos buffet.`,
-      crownCount: (firsts) => `${firsts} first-place wins in the cabinet. still room for more.`,
+      crownCount: (firsts) => `${firsts} first-place finishes in the cabinet. still room for more.`,
       lowItems: (leader, rate) => `${leader} ends ${formatPercent(rate)} of games with 3 or fewer items. inventory poverty arc.`,
       anvilLead: (leader, rate, champ) => `${leader} runs the anvil economy in ${formatPercent(rate)} of games${champ ? ` on ${champ}` : ""}.`,
       anvilFail: (leader, champ) => `${leader} tried the anvil economy${champ ? ` on ${champ}` : ""} and still went bottom 4. budget nerfed.`,

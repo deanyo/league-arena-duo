@@ -820,7 +820,7 @@
         { result: "top4", resultLabel: "top 4", placement: 3, champs: "lucian + jinx", highlight: "survived the chaos" },
         { result: "first", resultLabel: "1st", placement: 1, champs: "vi + jinx", highlight: "first place sealed" }
       ],
-      verdict: "hugegamer and MichyeoHEY are landing top 4 in 59% across 22 arena games, with 4 first-place wins and an average placement of 2.4. arena scoring: top 4 of 8 teams is a win, first place is the top spot. the data suggests MichyeoHEY leans on jinx, while riot keeps the augment wheel spicy. the vibe says you are one good roll away from dominance."
+      verdict: "hugegamer and MichyeoHEY are landing top 4 in 59% across 22 arena games, with 4 first-place finishes and an average placement of 2.4. arena scoring: top 4 of 8 teams is a win, first place is the top spot. the data suggests MichyeoHEY leans on jinx, while riot keeps the augment wheel spicy. the vibe says you are one good roll away from dominance."
     };
 
     function setStatus(text, tone) {
@@ -1102,7 +1102,7 @@
       statGames.textContent = summary.games + " games";
       statGamesSub.textContent = "last " + meta.matchCount + " arena games";
       statWinrate.textContent = formatPercent(summary.winRate);
-      statWinrateSub.innerHTML = `${summary.wins} top 4 / ${summary.games - summary.wins} bottom 4 · <span class="stat-flag">${safeFirsts} wins</span>`;
+      statWinrateSub.innerHTML = `${summary.wins} top 4 / ${summary.games - summary.wins} bottom 4 · <span class="stat-flag">${safeFirsts} firsts</span>`;
       const deathSummary = shareSummary(shares.deaths, meta.duo);
       const deathsTotal = (insights.deaths?.me || 0) + (insights.deaths?.duo || 0);
       statFirst.innerHTML = highlightNames(deathSummary.leader, meta.duo);
