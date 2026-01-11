@@ -340,16 +340,17 @@ function normalizeCachedPayload(data) {
   return data;
 }
 
-function buildVerdictFingerprint(summary, tone) {
+function buildVerdictFingerprint(summary, insights, tone) {
   const avgPlacement = Number.isFinite(summary.avgPlacement) ? summary.avgPlacement.toFixed(2) : "0.00";
+  const deathsShare = insights?.shares?.deaths || {};
   return [
     tone,
     summary.games || 0,
     summary.wins || 0,
     summary.firsts || 0,
     avgPlacement,
-    summary.firstDeaths?.me || 0,
-    summary.firstDeaths?.duo || 0,
+    deathsShare.me || 0,
+    deathsShare.duo || 0,
     String(summary.comfortBias || "").toLowerCase(),
     String(summary.comfortPick || "").toLowerCase(),
     summary.comfortPickRate || ""
@@ -521,14 +522,15 @@ function collapseWhitespace(text) {
   return String(text || "").replace(/\s+/g, " ").trim();
 }
 
-async function generateAiVerdict(summary, names, tone, env) {
+async function generateAiVerdict(summary, names, tone, insights, env) {
   const model = env.OPENAI_MODEL || "gpt-4o-mini";
   const games = summary.games || 0;
   const wins = summary.wins || 0;
   const losses = Math.max(games - wins, 0);
   const avgPlacement = Number.isFinite(summary.avgPlacement) ? Number(summary.avgPlacement.toFixed(2)) : 0;
-  const firstDeathsMe = summary.firstDeaths?.me || 0;
-  const firstDeathsDuo = summary.firstDeaths?.duo || 0;
+  const shares = insights?.shares || {};
+  const deaths = insights?.deaths || {};
+  const hasCombatStats = Boolean(insights?.flags?.hasCombatStats);
   const promptPayload = {
     players: [names.me, names.duo],
     tone,
@@ -540,10 +542,16 @@ async function generateAiVerdict(summary, names, tone, env) {
       top4Rate: formatPercent(summary.winRate),
       firsts: summary.firsts || 0,
       avgPlacement,
-      firstDeaths: {
-        me: firstDeathsMe,
-        duo: firstDeathsDuo
-      },
+      deaths: hasCombatStats
+        ? {
+            me: deaths.me || 0,
+            duo: deaths.duo || 0,
+            share: {
+              me: formatPercent(shares.deaths?.me || 0),
+              duo: formatPercent(shares.deaths?.duo || 0)
+            }
+          }
+        : null,
       comfortBias: summary.comfortBias,
       comfortPick: summary.comfortPick
     }
@@ -554,6 +562,7 @@ async function generateAiVerdict(summary, names, tone, env) {
     "Arena is 2v2v2v2 with 8 teams; top 4 is a win; 1st place is the crown.",
     "Use the provided facts only; do not invent numbers, events, or qualitative claims.",
     "Do not imply stats that are not explicitly provided.",
+    "Do not mention first deaths; use deaths only if provided.",
     "2-4 sentences, banter not toxic, no profanity or slurs.",
     "Always share blame with Riot or RNG in a light way.",
     "Avoid 'small sample size' unless games < 8."
@@ -588,13 +597,13 @@ async function generateAiVerdict(summary, names, tone, env) {
   return text;
 }
 
-async function getAiVerdict(summary, names, tone, env, ctx, url) {
+async function getAiVerdict(summary, names, tone, insights, env, ctx, url) {
   if (!env.OPENAI_API_KEY) {
     return { verdict: buildVerdict(summary, names, tone, { fresh: true }), source: "ai-fallback" };
   }
 
   const ttl = safeNumber(env.AI_VERDICT_TTL_SECONDS, 86400);
-  const fingerprint = buildVerdictFingerprint(summary, tone);
+  const fingerprint = buildVerdictFingerprint(summary, insights, tone);
   const cache = caches.default;
   const cacheUrl = new URL(url.origin + "/verdict/ai");
   cacheUrl.searchParams.set("key", fingerprint);
@@ -611,7 +620,7 @@ async function getAiVerdict(summary, names, tone, env, ctx, url) {
   }
 
   try {
-    const verdict = await generateAiVerdict(summary, names, tone, env);
+    const verdict = await generateAiVerdict(summary, names, tone, insights, env);
     const cacheResponse = new Response(JSON.stringify({ verdict }), {
       headers: {
         "Content-Type": "application/json",
@@ -631,8 +640,6 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
   const wins = summary.wins || 0;
   const losses = Math.max(games - wins, 0);
   const avgPlacement = Number.isFinite(summary.avgPlacement) ? Number(summary.avgPlacement.toFixed(2)) : 0;
-  const firstDeathsMe = summary.firstDeaths?.me || 0;
-  const firstDeathsDuo = summary.firstDeaths?.duo || 0;
   const shares = insights?.shares || {};
   const hasCombatStats = Boolean(insights?.flags?.hasCombatStats);
   const streaks = insights?.streaks || { top4: 0, bottom4: 0 };
@@ -641,6 +648,7 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
   const meta = insights?.meta || null;
   const items = insights?.items || null;
   const anvil = insights?.anvil || null;
+  const deaths = insights?.deaths || {};
   const promptPayload = {
     players: [names.me, names.duo],
     tone,
@@ -652,10 +660,16 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
       top4Rate: formatPercent(summary.winRate),
       firsts: summary.firsts || 0,
       avgPlacement,
-      firstDeaths: {
-        me: firstDeathsMe,
-        duo: firstDeathsDuo
-      },
+      deaths: hasCombatStats
+        ? {
+            me: deaths.me || 0,
+            duo: deaths.duo || 0,
+            share: {
+              me: formatPercent(shares.deaths?.me || 0),
+              duo: formatPercent(shares.deaths?.duo || 0)
+            }
+          }
+        : null,
       comfortPick: summary.comfortPick,
       comfortBias: summary.comfortBias,
       placements,
@@ -727,6 +741,7 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
     "Titles: 2-4 words, lowercase. Bodies: 1-2 sentences.",
     "Use only the provided facts and numbers; do not invent or infer extra stats.",
     "Do not use comparative claims unless the exact percentage is provided.",
+    "Do not mention first deaths; use deaths only if provided.",
     "Only mention combat share stats if facts.availability.combatShares is true.",
     "Avoid repeating the same fact across cards.",
     "Mention each player at least once across the set.",
@@ -1107,8 +1122,7 @@ function buildHighlight(me, duo, placement, seed) {
 function toneCopy(tone) {
   const copy = {
     gentle: {
-      firstTie: "both share the first deaths evenly. the data suggests mutual bravery.",
-      firstLead: (leader, rate) => `${leader} takes the first nap in ${rate}. the data suggests early enthusiasm.`,
+      deathTie: "deaths are split almost evenly. shared pain, shared growth.",
       comfortTie: (pick) => `${pick} appears on both sides. comfort pick energy.`,
       comfortLead: (pick, rate) => `${pick} shows up in ${rate}. leaning into what feels safe.`,
       damageLead: (leader, share) => `${leader} handles ${formatPercent(share)} of duo damage. steady carry energy.`,
@@ -1133,8 +1147,7 @@ function toneCopy(tone) {
       }
     },
     classic: {
-      firstTie: "both players trade first deaths evenly. the data suggests shared bravery.",
-      firstLead: (leader, rate) => `${leader} is first down in ${rate}. the data suggests early enthusiasm.`,
+      deathTie: "deaths are split down the middle. shared suffering, shared blame.",
       comfortTie: (pick) => `${pick} shows up in both rotations. shared comfort pick energy.`,
       comfortLead: (pick, rate) => `${pick} shows up in ${rate}. comfort pick or lifestyle choice.`,
       damageLead: (leader, share) => `${leader} deals ${formatPercent(share)} of duo damage. backpack tax applied.`,
@@ -1159,8 +1172,7 @@ function toneCopy(tone) {
       }
     },
     savage: {
-      firstTie: "both players speedrun the first death at equal pace. balance achieved.",
-      firstLead: (leader, rate) => `${leader} hits the grey screen first in ${rate}. fearless, or just fast.`,
+      deathTie: "deaths are split evenly. equal opportunity pain.",
       comfortTie: (pick) => `${pick} appears on both sides. commitment level: unshakable.`,
       comfortLead: (pick, rate) => `${pick} shows up in ${rate}. one-pick lifestyle confirmed.`,
       damageLead: (leader, share) => `${leader} delivers ${formatPercent(share)} of duo damage. backpack surcharge applied.`,
@@ -1201,18 +1213,17 @@ function buildRoasts(summary, names, tone, metaStats, insights) {
     list.push(roast);
   }
 
-  const firstLeader = summary.firstDeaths.me === summary.firstDeaths.duo
-    ? "tied"
-    : summary.firstDeaths.me > summary.firstDeaths.duo
-      ? names.me
-      : names.duo;
-  const firstBody = firstLeader === "tied"
-    ? copy.firstTie
-    : copy.firstLead(firstLeader, summary.firstDeathRate);
-  const firstRoast = { title: "first death trophy", body: firstBody };
-  addUnique(fallback, firstRoast);
-  if (summary.firstDeaths.me + summary.firstDeaths.duo > 0) {
-    addUnique(pool, firstRoast);
+  const deathsShare = insights?.shares?.deaths || null;
+  if (deathsShare) {
+    const diff = Math.abs((deathsShare.me || 0) - (deathsShare.duo || 0));
+    const deathsLeader = (deathsShare.me || 0) >= (deathsShare.duo || 0) ? names.me : names.duo;
+    const shareValue = (deathsShare.me || 0) >= (deathsShare.duo || 0) ? deathsShare.me : deathsShare.duo;
+    const deathsBody = diff <= 0.08
+      ? copy.deathTie
+      : copy.deathLead(deathsLeader, formatPercent(shareValue));
+    const deathsRoast = { title: "death share", body: deathsBody };
+    addUnique(fallback, deathsRoast);
+    addUnique(pool, deathsRoast);
   }
 
   const comfortBody = summary.comfortBias === "tied"
@@ -1272,11 +1283,6 @@ function buildRoasts(summary, names, tone, metaStats, insights) {
   const assistLeader = pickDominant(shares?.assists);
   if (assistLeader) {
     addUnique(pool, { title: "setup artist", body: copy.assistLead(assistLeader.name, assistLeader.share) });
-  }
-
-  const deathLeader = pickDominant(shares?.deaths);
-  if (deathLeader) {
-    addUnique(pool, { title: "grey screen", body: copy.deathLead(deathLeader.name, deathLeader.share) });
   }
 
   const diversity = insights?.diversity?.combined || 0;
@@ -1395,7 +1401,9 @@ function buildBlame(summary, names, insights) {
   }
 
   const games = summary.games || 0;
-  const totalFirstDeaths = summary.firstDeaths.me + summary.firstDeaths.duo;
+  const deathsMe = insights?.deaths?.me || 0;
+  const deathsDuo = insights?.deaths?.duo || 0;
+  const totalDeaths = deathsMe + deathsDuo;
   const shares = insights?.shares || {};
   const items = insights?.items || null;
   const meta = insights?.meta || null;
@@ -1408,26 +1416,26 @@ function buildBlame(summary, names, insights) {
   const earlyExits = (placements[7] || 0) + (placements[8] || 0);
   const closeRate = games > 0 ? closeExits / games : 0;
 
-  const executionScore = (count) => count * 1.2;
-  const impactScore = (share) => (hasCombatStats ? Math.max(0.45 - (share || 0), 0) * 10 : 0);
+  const executionScore = (share) => (hasCombatStats ? Math.max((share || 0) - 0.5, 0) * 12 : 0);
+  const impactScore = (share) => (hasCombatStats ? Math.max(0.5 - (share || 0), 0) * 10 : 0);
   const economyScore = (rate) => (rate || 0) * 6;
   const metaScore = (rate) => {
     if (!Number.isFinite(rate) || summary.winRate >= 0.5) return 0;
-    if (rate >= 0.6) return 1.8;
-    if (rate <= 0.35) return 1.2;
-    return 0.6;
+    if (rate >= 0.65) return 1.8;
+    if (rate <= 0.45) return 1.6;
+    return 0.8;
   };
   const anvilScore = (rate) => (summary.winRate < 0.5 && rate >= 0.3 ? 1.4 : 0);
 
   const meScores = {
-    execution: executionScore(summary.firstDeaths.me),
+    execution: executionScore(shares.deaths?.me),
     impact: impactScore(shares.damage?.me),
     economy: economyScore(items?.lowRate?.me),
     meta: metaScore(meta?.me?.metaRate),
     anvil: anvilScore(anvil?.meRate)
   };
   const duoScores = {
-    execution: executionScore(summary.firstDeaths.duo),
+    execution: executionScore(shares.deaths?.duo),
     impact: impactScore(shares.damage?.duo),
     economy: economyScore(items?.lowRate?.duo),
     meta: metaScore(meta?.duo?.metaRate),
@@ -1450,7 +1458,7 @@ function buildBlame(summary, names, insights) {
   };
 
   const reasonMap = {
-    execution: "first to fall",
+    execution: "death share",
     impact: "damage debt",
     economy: "economy grief",
     meta: "meta habits",
@@ -1468,7 +1476,7 @@ function buildBlame(summary, names, insights) {
         : "balance patch vibes";
 
   const formatShare = (value) => (Number.isFinite(value) ? formatPercent(value) : "--");
-  const firstShare = (count) => (totalFirstDeaths > 0 ? formatPercent(count / totalFirstDeaths) : "0%");
+  const deathShare = (count) => (totalDeaths > 0 ? formatPercent(count / totalDeaths) : "0%");
   const economyLine = (rate, anvilRate) => {
     if (!Number.isFinite(rate)) return "no item data";
     const base = `low items ${formatPercent(rate)}`;
@@ -1479,13 +1487,13 @@ function buildBlame(summary, names, insights) {
   };
 
   const meBreakdown = [
-    { label: "execution", value: `first deaths ${summary.firstDeaths.me} (${firstShare(summary.firstDeaths.me)})` },
+    { label: "execution", value: `deaths ${deathsMe} (${deathShare(deathsMe)})` },
     { label: "impact", value: hasCombatStats ? `damage share ${formatShare(shares.damage?.me)}` : "no combat data" },
     { label: "economy", value: economyLine(items?.lowRate?.me, anvil?.meRate) },
     { label: "meta", value: meta ? `S/A picks ${formatShare(meta.me?.metaRate)}` : "meta offline" }
   ];
   const duoBreakdown = [
-    { label: "execution", value: `first deaths ${summary.firstDeaths.duo} (${firstShare(summary.firstDeaths.duo)})` },
+    { label: "execution", value: `deaths ${deathsDuo} (${deathShare(deathsDuo)})` },
     { label: "impact", value: hasCombatStats ? `damage share ${formatShare(shares.damage?.duo)}` : "no combat data" },
     { label: "economy", value: economyLine(items?.lowRate?.duo, anvil?.duoRate) },
     { label: "meta", value: meta ? `S/A picks ${formatShare(meta.duo?.metaRate)}` : "meta offline" }
@@ -1613,7 +1621,7 @@ async function handleDuo(req, env, ctx) {
 
     if (verdictStyle === "ai") {
       const [aiVerdict, aiRoasts] = await Promise.all([
-        getAiVerdict(data.summary, data.meta.duo, tone, env, ctx, url),
+        getAiVerdict(data.summary, data.meta.duo, tone, data.insights, env, ctx, url),
         getAiRoasts(data.summary, data.meta.duo, tone, data.insights, roastsAuto, env, ctx, url)
       ]);
       data.meta.verdictSource = aiVerdict.source;
@@ -1765,7 +1773,7 @@ async function handleDuo(req, env, ctx) {
   let roasts = roastsAuto;
   if (verdictStyle === "ai") {
     const [aiVerdict, aiRoasts] = await Promise.all([
-      getAiVerdict(summary, names, tone, env, ctx, url),
+      getAiVerdict(summary, names, tone, insights, env, ctx, url),
       getAiRoasts(summary, names, tone, insights, roastsAuto, env, ctx, url)
     ]);
     verdictSource = aiVerdict.source;

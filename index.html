@@ -504,9 +504,9 @@
           <div class="stat-sub" id="stat-winrate-sub">top 4 / bottom 4</div>
         </div>
         <div class="stat">
-          <div class="stat-label">first death</div>
+          <div class="stat-label">death share</div>
           <div class="stat-value" id="stat-first">--</div>
-          <div class="stat-sub" id="stat-first-sub">who hits grey screen first</div>
+          <div class="stat-sub" id="stat-first-sub">grey screen split</div>
         </div>
         <div class="stat">
           <div class="stat-label">damage share</div>
@@ -714,7 +714,9 @@
       },
       insights: {
         streaks: { top4: 4, bottom4: 2 },
+        deaths: { me: 19, duo: 21 },
         shares: {
+          deaths: { me: 0.48, duo: 0.52 },
           damage: { me: 0.46, duo: 0.54 },
           tank: { me: 0.58, duo: 0.42 }
         },
@@ -729,7 +731,7 @@
           share: 0.34,
           reason: "first to fall",
           breakdown: [
-            { label: "execution", value: "first deaths 5 (36%)" },
+            { label: "execution", value: "deaths 19 (48%)" },
             { label: "impact", value: "damage share 48%" },
             { label: "economy", value: "low items 22%" },
             { label: "meta", value: "S/A picks 41%" }
@@ -739,7 +741,7 @@
           share: 0.41,
           reason: "damage debt",
           breakdown: [
-            { label: "execution", value: "first deaths 9 (64%)" },
+            { label: "execution", value: "deaths 21 (52%)" },
             { label: "impact", value: "damage share 52%" },
             { label: "economy", value: "low items 28%" },
             { label: "meta", value: "S/A picks 55%" }
@@ -756,7 +758,7 @@
         }
       },
       roasts: [
-        { title: "first death trophy", body: "MichyeoHEY is first down in 41% of rounds. the data suggests early enthusiasm." },
+        { title: "death share", body: "deaths are split down the middle. shared suffering, shared blame." },
         { title: "streak watch", body: "top 4 streak hit 4. momentum is real." },
         { title: "comfort lock", body: "jinx shows up in every other match. comfort pick or lifestyle choice." },
         { title: "clutch moments", body: "hugegamer secures the last takedown in 8 rounds. hero arc confirmed." }
@@ -1045,9 +1047,28 @@
       statGamesSub.textContent = "last " + meta.matchCount + " arena games";
       statWinrate.textContent = formatPercent(summary.winRate);
       statWinrateSub.textContent = summary.wins + " top 4 / " + (summary.games - summary.wins) + " bottom 4 · " + safeFirsts + " firsts";
-      const firstLeader = leaderLabel(summary.firstDeaths.me, summary.firstDeaths.duo, meta.duo.me, meta.duo.duo);
-      statFirst.innerHTML = highlightNames(firstLeader, meta.duo);
-      statFirstSub.innerHTML = highlightNames(meta.duo.me + " " + summary.firstDeaths.me + " vs " + meta.duo.duo + " " + summary.firstDeaths.duo, meta.duo);
+      const deathSummary = shareSummary(shares.deaths, meta.duo);
+      const deathsTotal = (insights.deaths?.me || 0) + (insights.deaths?.duo || 0);
+      statFirst.innerHTML = highlightNames(deathSummary.leader, meta.duo);
+      if (deathsTotal > 0) {
+        statFirstSub.innerHTML = highlightNames(
+          meta.duo.me +
+            " " +
+            (insights.deaths?.me || 0) +
+            " (" +
+            formatPercent(shares.deaths?.me || 0) +
+            ") vs " +
+            meta.duo.duo +
+            " " +
+            (insights.deaths?.duo || 0) +
+            " (" +
+            formatPercent(shares.deaths?.duo || 0) +
+            ")",
+          meta.duo
+        );
+      } else {
+        statFirstSub.textContent = "no combat data";
+      }
       const damageSummary = shareSummary(shares.damage, meta.duo);
       statDamage.innerHTML = highlightNames(damageSummary.leader, meta.duo);
       statDamageSub.innerHTML = highlightNames(damageSummary.detail, meta.duo);
