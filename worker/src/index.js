@@ -75,6 +75,40 @@ async function probeRiotStatus(platform, env) {
   }
 }
 
+async function probeSummoner(platform, env, name) {
+  if (!env.RIOT_API_KEY) {
+    return { ok: false, status: 0, error: "missing key" };
+  }
+  const safeName = (name || "").trim();
+  if (!safeName) {
+    return { ok: false, status: 0, error: "missing summoner name" };
+  }
+  const url = `https://${platform}.api.riotgames.com/lol/summoner/v4/summoners/by-name/${encodeURIComponent(safeName)}`;
+  try {
+    const response = await fetch(url, {
+      headers: { "X-Riot-Token": env.RIOT_API_KEY }
+    });
+    const text = await response.text();
+    let body = null;
+    if (text) {
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = text;
+      }
+    }
+    const payload = { ok: response.ok, status: response.status };
+    if (!response.ok) {
+      payload.body = body;
+    } else {
+      payload.body = { name: body?.name, puuid: body?.puuid };
+    }
+    return payload;
+  } catch (error) {
+    return { ok: false, status: 0, error: error.message || "probe failed" };
+  }
+}
+
 function normalizeName(value, fallback) {
   const cleaned = (value || "").trim();
   return cleaned ? cleaned : fallback;
@@ -411,6 +445,10 @@ async function handleDebug(req, env) {
 
   if (url.searchParams.get("probe") === "1" && platform) {
     payload.probe = await probeRiotStatus(platform, env);
+    const probeName = url.searchParams.get("name");
+    if (probeName) {
+      payload.summonerProbe = await probeSummoner(platform, env, probeName);
+    }
   }
 
   return jsonResponse(payload, 200);
