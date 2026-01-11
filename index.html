@@ -726,10 +726,14 @@
     function renderSummary(data) {
       const summary = data.summary;
       const meta = data.meta;
+      const matches = Array.isArray(data.matches) ? data.matches : [];
+      const safeFirsts = Number.isFinite(summary.firsts)
+        ? summary.firsts
+        : matches.filter((match) => (match.placement || 0) === 1).length;
       statGames.textContent = summary.games + " games";
       statGamesSub.textContent = "last " + meta.matchCount + " arena games";
       statWinrate.textContent = formatPercent(summary.winRate);
-      statWinrateSub.textContent = summary.wins + " top 4 / " + (summary.games - summary.wins) + " bottom 4 · " + summary.firsts + " firsts";
+      statWinrateSub.textContent = summary.wins + " top 4 / " + (summary.games - summary.wins) + " bottom 4 · " + safeFirsts + " firsts";
       const firstLeader = leaderLabel(summary.firstDeaths.me, summary.firstDeaths.duo, meta.duo.me, meta.duo.duo);
       statFirst.innerHTML = highlightNames(firstLeader, meta.duo);
       statFirstSub.innerHTML = highlightNames(meta.duo.me + " " + summary.firstDeaths.me + " vs " + meta.duo.duo + " " + summary.firstDeaths.duo, meta.duo);
@@ -868,9 +872,14 @@
 
     function renderMeta(data) {
       const source = data.meta.source || "api";
-      const statusText = source === "demo" ? "demo mode" : source === "cache" ? "cached data" : "live data";
+      const verdictMode = data.meta.verdictSource || normalizeVerdictStyle(document.getElementById("verdict-style").value);
+      let statusText = source === "demo" ? "demo mode" : source === "cache" ? "cached stats" : "live data";
+      if (source === "cache" && verdictMode === "fresh") {
+        statusText = "cached stats · fresh verdict";
+      }
       setStatus(statusText, source === "demo" ? "status-warn" : "status-ok");
-      dataSource.textContent = "data source: " + source;
+      const sourceText = source === "cache" && verdictMode === "fresh" ? "cache (fresh verdict)" : source;
+      dataSource.textContent = "data source: " + sourceText;
       duoTitle.innerHTML = formatDuoTitle(data.meta.duo);
       duoSub.textContent = "arena duo report for " + data.meta.duo.region.toUpperCase();
     }

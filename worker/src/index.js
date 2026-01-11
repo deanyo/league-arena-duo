@@ -214,6 +214,56 @@ function smallSamplePrefix(games) {
   return "";
 }
 
+function normalizeCachedPayload(data) {
+  if (!data || !data.summary) return data;
+  const summary = data.summary;
+  const matches = Array.isArray(data.matches) ? data.matches : [];
+  const games = Number.isFinite(summary.games) ? summary.games : matches.length;
+  const firsts = Number.isFinite(summary.firsts)
+    ? summary.firsts
+    : matches.filter((match) => (match.placement || 0) === 1).length;
+  summary.games = games;
+  summary.firsts = firsts;
+  summary.firstRate = formatPercent(games > 0 ? firsts / games : 0);
+  return data;
+}
+
+function refreshCachedRoasts(roasts, summary, names, tone) {
+  if (!Array.isArray(roasts)) return roasts;
+  const copy = toneCopy(tone);
+  const firstLeader = summary.firstDeaths.me === summary.firstDeaths.duo
+    ? "tied"
+    : summary.firstDeaths.me > summary.firstDeaths.duo
+      ? names.me
+      : names.duo;
+  const firstBody = firstLeader === "tied"
+    ? copy.firstTie
+    : copy.firstLead(firstLeader, summary.firstDeathRate);
+
+  const ultLeader = summary.unusedUlts.me === summary.unusedUlts.duo
+    ? "tied"
+    : summary.unusedUlts.me > summary.unusedUlts.duo
+      ? names.me
+      : names.duo;
+  const ultCount = ultLeader === names.me ? summary.unusedUlts.me : summary.unusedUlts.duo;
+  const ultBody = ultLeader === "tied"
+    ? copy.ultTie
+    : copy.ultLead(ultLeader, ultCount);
+
+  const comfortBody = summary.comfortBias === "tied"
+    ? copy.comfortTie(summary.comfortPick)
+    : copy.comfortLead(summary.comfortPick, summary.comfortPickRate);
+
+  const updates = {
+    "first death trophy": firstBody,
+    "ult hoarder": ultBody,
+    "comfort lock": comfortBody,
+    "clutch window": copy.clutch(summary)
+  };
+
+  return roasts.map((roast) => (updates[roast.title] ? { ...roast, body: updates[roast.title] } : roast));
+}
+
 function normalizeChampionKey(name) {
   return String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -664,13 +714,20 @@ async function handleDuo(req, env, ctx) {
   const cacheKey = new Request(cacheKeyUrl.toString(), req);
   const cached = await cache.match(cacheKey);
   if (cached) {
+    const data = normalizeCachedPayload(await cached.clone().json());
+    data.meta.source = "cache";
+    data.meta.verdictSource = verdictStyle === "fresh" ? "fresh" : "auto";
+    data.roasts = refreshCachedRoasts(data.roasts || [], data.summary, data.meta.duo, tone);
+    data.verdict = buildVerdict(data.summary, data.meta.duo, tone, { fresh: verdictStyle === "fresh" });
+
     if (verdictStyle === "fresh") {
-      const data = await cached.clone().json();
-      data.meta.source = "cache";
-      data.verdict = buildVerdict(data.summary, data.meta.duo, tone, { fresh: true });
       return jsonResponse(data, 200, { "Cache-Control": "no-store" });
     }
-    return cached;
+
+    const headers = { "Cache-Control": `public, max-age=${safeNumber(env.CACHE_TTL_SECONDS, 3600)}` };
+    const response = jsonResponse(data, 200, headers);
+    ctx.waitUntil(cache.put(cacheKey, response.clone()));
+    return response;
   }
 
   const mePlayer = await resolvePlayer(meInput, platform, regional, env);
@@ -758,7 +815,8 @@ async function handleDuo(req, env, ctx) {
       source: "api",
       updatedAt: new Date().toISOString(),
       matchCount: matches,
-      duo: { me: names.me, duo: names.duo, region }
+      duo: { me: names.me, duo: names.duo, region },
+      verdictSource: verdictStyle === "fresh" ? "fresh" : "auto"
     },
     summary,
     blame,
