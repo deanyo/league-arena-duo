@@ -109,6 +109,40 @@ async function probeSummoner(platform, env, name) {
   }
 }
 
+async function probeAccountByRiotId(region, env, riotId) {
+  if (!env.RIOT_API_KEY) {
+    return { ok: false, status: 0, error: "missing key" };
+  }
+  const parsed = parseRiotId(riotId);
+  if (!parsed) {
+    return { ok: false, status: 0, error: "invalid riot id" };
+  }
+  const url = `https://${region}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(parsed.gameName)}/${encodeURIComponent(parsed.tagLine)}`;
+  try {
+    const response = await fetch(url, {
+      headers: { "X-Riot-Token": env.RIOT_API_KEY }
+    });
+    const text = await response.text();
+    let body = null;
+    if (text) {
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = text;
+      }
+    }
+    const payload = { ok: response.ok, status: response.status };
+    if (!response.ok) {
+      payload.body = body;
+    } else {
+      payload.body = { gameName: body?.gameName, tagLine: body?.tagLine, puuid: body?.puuid };
+    }
+    return payload;
+  } catch (error) {
+    return { ok: false, status: 0, error: error.message || "probe failed" };
+  }
+}
+
 function normalizeName(value, fallback) {
   const cleaned = (value || "").trim();
   return cleaned ? cleaned : fallback;
@@ -117,6 +151,26 @@ function normalizeName(value, fallback) {
 function normalizeRegion(value, fallback) {
   const cleaned = (value || "").trim().toLowerCase();
   return PLATFORM_BY_REGION[cleaned] ? cleaned : fallback;
+}
+
+function parseRiotId(value) {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return null;
+  if (trimmed.includes("#")) {
+    const [gameName, tagLine] = trimmed.split("#");
+    if (gameName && tagLine) {
+      return { gameName: gameName.trim(), tagLine: tagLine.trim() };
+    }
+  }
+  const dashIndex = trimmed.lastIndexOf("-");
+  if (dashIndex > 0) {
+    const gameName = trimmed.slice(0, dashIndex).trim();
+    const tagLine = trimmed.slice(dashIndex + 1).trim();
+    if (gameName && /^[A-Za-z0-9]{2,5}$/.test(tagLine)) {
+      return { gameName, tagLine };
+    }
+  }
+  return null;
 }
 
 function safeNumber(value, fallback) {
@@ -161,6 +215,11 @@ async function getSummonerByName(name, platform, env) {
   return riotFetch(url, env);
 }
 
+async function getAccountByRiotId(gameName, tagLine, region, env) {
+  const url = `https://${region}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`;
+  return riotFetch(url, env);
+}
+
 async function getMatchIds(puuid, region, count, env) {
   const url = `https://${region}.api.riotgames.com/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids?start=0&count=${count}`;
   return riotFetch(url, env);
@@ -169,6 +228,16 @@ async function getMatchIds(puuid, region, count, env) {
 async function getMatch(matchId, region, env) {
   const url = `https://${region}.api.riotgames.com/lol/match/v5/matches/${matchId}`;
   return riotFetch(url, env);
+}
+
+async function resolvePlayer(input, platform, region, env) {
+  const riotId = parseRiotId(input);
+  if (riotId) {
+    const account = await getAccountByRiotId(riotId.gameName, riotId.tagLine, region, env);
+    return { puuid: account.puuid, name: account.gameName || input };
+  }
+  const summoner = await getSummonerByName(input, platform, env);
+  return { puuid: summoner.puuid, name: summoner.name || input };
 }
 
 function pickTopChampion(counts) {
@@ -311,8 +380,8 @@ async function handleDuo(req, env, ctx) {
 
   const url = new URL(req.url);
   const region = normalizeRegion(url.searchParams.get("region"), env.DEFAULT_REGION || "euw");
-  const meInput = normalizeName(url.searchParams.get("me"), env.DEFAULT_ME || "hugegamer");
-  const duoInput = normalizeName(url.searchParams.get("duo"), env.DEFAULT_DUO || "MichyeoHEY");
+  const meInput = normalizeName(url.searchParams.get("me"), env.DEFAULT_ME || "hugegamer-EUW");
+  const duoInput = normalizeName(url.searchParams.get("duo"), env.DEFAULT_DUO || "MichyeoHEY-EUW");
   const matches = Math.min(50, Math.max(5, safeNumber(url.searchParams.get("matches"), Number(env.DEFAULT_MATCHES) || 25)));
 
   const platform = PLATFORM_BY_REGION[region];
@@ -336,11 +405,11 @@ async function handleDuo(req, env, ctx) {
     return cached;
   }
 
-  const meSummoner = await getSummonerByName(meInput, platform, env);
-  const duoSummoner = await getSummonerByName(duoInput, platform, env);
+  const mePlayer = await resolvePlayer(meInput, platform, regional, env);
+  const duoPlayer = await resolvePlayer(duoInput, platform, regional, env);
 
   const matchScanCount = Math.min(100, Math.max(matches * 3, 20));
-  const matchIds = await getMatchIds(meSummoner.puuid, regional, matchScanCount, env);
+  const matchIds = await getMatchIds(mePlayer.puuid, regional, matchScanCount, env);
 
   const stats = {
     games: 0,
@@ -359,8 +428,8 @@ async function handleDuo(req, env, ctx) {
     if (!isArenaMatch(match.info)) continue;
 
     const participants = match.info.participants || [];
-    const meParticipant = participants.find((p) => p.puuid === meSummoner.puuid);
-    const duoParticipant = participants.find((p) => p.puuid === duoSummoner.puuid);
+    const meParticipant = participants.find((p) => p.puuid === mePlayer.puuid);
+    const duoParticipant = participants.find((p) => p.puuid === duoPlayer.puuid);
     if (!meParticipant || !duoParticipant) continue;
 
     stats.games += 1;
@@ -397,7 +466,7 @@ async function handleDuo(req, env, ctx) {
     });
   }
 
-  const names = { me: meSummoner.name || meInput, duo: duoSummoner.name || duoInput };
+  const names = { me: mePlayer.name || meInput, duo: duoPlayer.name || duoInput };
   const summary = buildSummary(stats, names, matches);
   const blame = buildBlame(summary, names);
   const roasts = buildRoasts(summary, names);
@@ -448,6 +517,10 @@ async function handleDebug(req, env) {
     const probeName = url.searchParams.get("name");
     if (probeName) {
       payload.summonerProbe = await probeSummoner(platform, env, probeName);
+    }
+    const probeRiotId = url.searchParams.get("riotId");
+    if (probeRiotId && regional) {
+      payload.accountProbe = await probeAccountByRiotId(regional, env, probeRiotId);
     }
   }
 

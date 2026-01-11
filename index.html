@@ -396,11 +396,11 @@
           </label>
           <label class="field">
             <span>summoner</span>
-            <input id="summoner-a" placeholder="example: hugegamer">
+            <input id="summoner-a" placeholder="example: hugegamer-EUW">
           </label>
           <label class="field">
             <span>duo</span>
-            <input id="summoner-b" placeholder="example: MichyeoHEY">
+            <input id="summoner-b" placeholder="example: MichyeoHEY-EUW">
           </label>
           <label class="field">
             <span>matches to scan</span>
@@ -433,7 +433,7 @@
           <button class="btn" type="reset" id="reset-btn">reset</button>
         </div>
       </form>
-      <div class="hint" id="url-hint">share link: /?me=hugegamer&duo=MichyeoHEY&region=euw</div>
+      <div class="hint" id="url-hint">share link: /?me=hugegamer-EUW&duo=MichyeoHEY-EUW&region=euw</div>
     </section>
 
     <section class="panel" style="animation-delay: 0.1s;">
@@ -549,8 +549,8 @@
     const API_BASE = "https://league-arena-duo.deanryanit.workers.dev";
     const DEFAULTS = {
       region: "euw",
-      me: "hugegamer",
-      duo: "MichyeoHEY",
+      me: "hugegamer-EUW",
+      duo: "MichyeoHEY-EUW",
       matches: "25",
       tone: "classic",
       verdict: "auto"
@@ -646,6 +646,22 @@
 
     function formatPercent(value) {
       return Math.round(value * 100) + "%";
+    }
+
+    function displayNameFromInput(value) {
+      const trimmed = (value || "").trim();
+      if (!trimmed) return "";
+      if (trimmed.includes("#")) {
+        return trimmed.split("#")[0].trim();
+      }
+      const dashIndex = trimmed.lastIndexOf("-");
+      if (dashIndex > 0) {
+        const tag = trimmed.slice(dashIndex + 1).trim();
+        if (/^[A-Za-z0-9]{2,5}$/.test(tag)) {
+          return trimmed.slice(0, dashIndex).trim();
+        }
+      }
+      return trimmed;
     }
 
     function escapeHtml(value) {
@@ -777,11 +793,15 @@
         me: params && params.me ? params.me : DEFAULTS.me,
         duo: params && params.duo ? params.duo : DEFAULTS.duo
       };
+      const displayNames = {
+        me: displayNameFromInput(names.me) || names.me,
+        duo: displayNameFromInput(names.duo) || names.duo
+      };
       const region = params && params.region ? params.region : DEFAULTS.region;
 
       setStatus("api error", "status-bad");
       dataSource.textContent = "data source: error";
-      duoTitle.innerHTML = formatDuoTitle(names);
+      duoTitle.innerHTML = formatDuoTitle(displayNames);
       duoSub.textContent = "arena duo report for " + region.toUpperCase();
 
       statGames.textContent = "--";
@@ -797,8 +817,8 @@
       statBlame.textContent = "--";
       statBlameSub.textContent = "me / duo / riot";
 
-      blameMeLabel.textContent = names.me;
-      blameDuoLabel.textContent = names.duo;
+      blameMeLabel.textContent = displayNames.me;
+      blameDuoLabel.textContent = displayNames.duo;
       blameMe.textContent = "--";
       blameMeBar.style.width = "0%";
       blameMeNote.textContent = "api error";
@@ -963,13 +983,17 @@
 
     sampleBtn.addEventListener("click", () => {
       const params = { ...DEFAULTS };
+      const displayNames = {
+        me: displayNameFromInput(params.me) || params.me,
+        duo: displayNameFromInput(params.duo) || params.duo
+      };
       applyParams(params);
       updateUrl(params);
       renderAll({
         ...demoData,
         meta: {
           ...demoData.meta,
-          duo: { me: params.me, duo: params.duo, region: params.region },
+          duo: { me: displayNames.me, duo: displayNames.duo, region: params.region },
           matchCount: Number(params.matches)
         }
       });

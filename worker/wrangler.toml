@@ -4,7 +4,7 @@ compatibility_date = "2024-10-01"
 
 [vars]
 DEFAULT_REGION = "euw"
-DEFAULT_ME = "hugegamer"
-DEFAULT_DUO = "MichyeoHEY"
+DEFAULT_ME = "hugegamer-EUW"
+DEFAULT_DUO = "MichyeoHEY-EUW"
 DEFAULT_MATCHES = "25"
 CACHE_TTL_SECONDS = "3600"

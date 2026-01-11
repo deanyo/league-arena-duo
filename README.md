@@ -8,6 +8,7 @@ endpoint is wired up.
 - The worker should expose `GET /duo` with query params:
   - `region`, `me`, `duo`, `matches`, `tone`, `verdict`
 - Response shape should follow the `demoData` structure in `index.html`.
+- Inputs can be plain summoner names or Riot IDs (`name#TAG`), including op.gg-style `name-TAG`.
 
 ## Cloudflare Worker (Wrangler)
 Worker lives in `worker/`.
