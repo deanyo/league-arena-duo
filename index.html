@@ -392,6 +392,15 @@
     .share-mode .lookup-panel {
       display: none;
     }
+    .share-mode .panel {
+      animation: none !important;
+      opacity: 1 !important;
+      transform: none !important;
+    }
+    .share-mode .panel * {
+      animation: none !important;
+      transition: none !important;
+    }
     @keyframes rise {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
@@ -1447,6 +1456,7 @@
         if (document.fonts && document.fonts.ready) {
           await document.fonts.ready;
         }
+        await new Promise((resolve) => requestAnimationFrame(resolve));
         const scale = Math.min(2, window.devicePixelRatio || 1);
         const canvas = await window.html2canvas(reportNode, {
           backgroundColor: "#14111b",
