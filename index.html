@@ -1399,14 +1399,27 @@
       return response.json();
     }
 
-    async function runLookup(params) {
-      setStatus("loading duo stats", "status-ok");
+    let lookupToken = 0;
+
+    async function runLookup(params, attempt = 0, token = null) {
+      const currentToken = token || ++lookupToken;
+      if (token && token !== lookupToken) return;
+      setStatus(attempt ? "rate limited, retrying..." : "loading duo stats", "status-ok");
       dataSource.textContent = "data source: api";
       try {
         const data = await fetchDuoData(params);
+        if (currentToken !== lookupToken) return;
         renderAll(data);
       } catch (error) {
-        renderErrorState(error.message || "api error", params);
+        const message = error.message || "api error";
+        const isRateLimit = /rate limit/i.test(message);
+        if (isRateLimit && attempt < 2 && currentToken === lookupToken) {
+          const delay = Math.min(12000, 3000 * (attempt + 1) + Math.floor(Math.random() * 500));
+          setStatus(`rate limited, retrying in ${Math.ceil(delay / 1000)}s`, "status-warn");
+          setTimeout(() => runLookup(params, attempt + 1, currentToken), delay);
+          return;
+        }
+        renderErrorState(message, params);
       }
     }
 
