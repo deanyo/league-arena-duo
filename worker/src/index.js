@@ -47,6 +47,34 @@ function jsonResponse(payload, status = 200, extraHeaders = {}) {
   });
 }
 
+async function probeRiotStatus(platform, env) {
+  if (!env.RIOT_API_KEY) {
+    return { ok: false, status: 0, error: "missing key" };
+  }
+  const url = `https://${platform}.api.riotgames.com/lol/status/v4/platform-data`;
+  try {
+    const response = await fetch(url, {
+      headers: { "X-Riot-Token": env.RIOT_API_KEY }
+    });
+    const text = await response.text();
+    let body = null;
+    if (text) {
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = text;
+      }
+    }
+    const payload = { ok: response.ok, status: response.status };
+    if (!response.ok) {
+      payload.body = body;
+    }
+    return payload;
+  } catch (error) {
+    return { ok: false, status: 0, error: error.message || "probe failed" };
+  }
+}
+
 function normalizeName(value, fallback) {
   const cleaned = (value || "").trim();
   return cleaned ? cleaned : fallback;
@@ -361,6 +389,33 @@ async function handleDuo(req, env, ctx) {
   return response;
 }
 
+async function handleDebug(req, env) {
+  const url = new URL(req.url);
+  const region = normalizeRegion(url.searchParams.get("region"), env.DEFAULT_REGION || "euw");
+  const platform = PLATFORM_BY_REGION[region];
+  const regional = REGION_BY_PLATFORM[platform];
+  const payload = {
+    ok: true,
+    hasKey: Boolean(env.RIOT_API_KEY),
+    keyLength: env.RIOT_API_KEY ? env.RIOT_API_KEY.length : 0,
+    defaults: {
+      region: env.DEFAULT_REGION || "euw",
+      me: env.DEFAULT_ME || "",
+      duo: env.DEFAULT_DUO || "",
+      matches: env.DEFAULT_MATCHES || ""
+    },
+    region,
+    platform,
+    regional
+  };
+
+  if (url.searchParams.get("probe") === "1" && platform) {
+    payload.probe = await probeRiotStatus(platform, env);
+  }
+
+  return jsonResponse(payload, 200);
+}
+
 export default {
   async fetch(req, env, ctx) {
     if (req.method === "OPTIONS") {
@@ -368,6 +423,13 @@ export default {
     }
 
     const url = new URL(req.url);
+    if (url.pathname === "/debug") {
+      try {
+        return await handleDebug(req, env);
+      } catch (error) {
+        return jsonResponse({ error: error.message || "Debug error" }, 500);
+      }
+    }
     if (url.pathname === "/duo") {
       try {
         return await handleDuo(req, env, ctx);
