@@ -452,6 +452,14 @@ function buildMomentsFingerprint(summary, matches, tone) {
   return [tone, summary.games || 0, summary.wins || 0, summary.firsts || 0, avgPlacement, matchKey].join("|");
 }
 
+function buildAiBundleFingerprint(summary, insights, matches, tone) {
+  return [
+    buildVerdictFingerprint(summary, insights, tone),
+    buildRoastFingerprint(summary, insights, tone),
+    buildMomentsFingerprint(summary, matches, tone)
+  ].join("|");
+}
+
 function buildInsights(stats, summary, metaStats) {
   const games = summary.games || 0;
   const sum = (pair) => (pair?.me || 0) + (pair?.duo || 0);
@@ -1279,6 +1287,297 @@ async function generateAiMoments(summary, names, tone, matches, env) {
     throw new Error("openai invalid moments");
   }
   return parsed.moments;
+}
+
+async function generateAiBundle(summary, names, tone, insights, matches, env) {
+  const model = env.OPENAI_MODEL || "gpt-4o-mini";
+  const games = summary.games || 0;
+  const wins = summary.wins || 0;
+  const losses = Math.max(games - wins, 0);
+  const avgPlacement = Number.isFinite(summary.avgPlacement) ? Number(summary.avgPlacement.toFixed(2)) : 0;
+  const shares = insights?.shares || {};
+  const deaths = insights?.deaths || {};
+  const support = insights?.support || {};
+  const hasCombatStats = Boolean(insights?.flags?.hasCombatStats);
+  const streaks = insights?.streaks || { top4: 0, bottom4: 0 };
+  const diversity = insights?.diversity || { combined: 0 };
+  const placements = insights?.placements || {};
+  const meta = insights?.meta || null;
+  const items = insights?.items || null;
+  const anvil = insights?.anvil || null;
+  const matchItems = (matches || []).map((match, index) => {
+    const rawChamps = String(match.champs || "")
+      .split(" + ")
+      .map(stripTierSuffix)
+      .filter(Boolean);
+    const taggedChamps = Array.isArray(match.champsTagged)
+      ? match.champsTagged.map(stripTierSuffix).filter(Boolean)
+      : [];
+    const champs = rawChamps.length ? rawChamps : taggedChamps;
+    return {
+      index,
+      placement: match.placement || 0,
+      result: match.resultLabel || match.result || "",
+      champions: champs,
+      pairLabel: champs.join(" + "),
+      hint: match.highlight || ""
+    };
+  });
+
+  const promptPayload = {
+    players: [names.me, names.duo],
+    tone,
+    arenaContext: "2v2v2v2v2v2v2v2, 8 teams, top 4 is a win, 1st is the top spot",
+    facts: {
+      games,
+      top4Wins: wins,
+      bottom4Losses: losses,
+      top4Rate: formatPercent(summary.winRate),
+      firsts: summary.firsts || 0,
+      avgPlacement,
+      deaths: hasCombatStats
+        ? {
+            me: deaths.me || 0,
+            duo: deaths.duo || 0,
+            share: {
+              me: formatPercent(shares.deaths?.me || 0),
+              duo: formatPercent(shares.deaths?.duo || 0)
+            }
+          }
+        : null,
+      comfortPick: summary.comfortPick,
+      comfortBias: summary.comfortBias,
+      placements,
+      streaks,
+      shares: hasCombatStats
+        ? {
+            kills: {
+              me: formatPercent(shares.kills?.me || 0),
+              duo: formatPercent(shares.kills?.duo || 0)
+            },
+            assists: {
+              me: formatPercent(shares.assists?.me || 0),
+              duo: formatPercent(shares.assists?.duo || 0)
+            },
+            deaths: {
+              me: formatPercent(shares.deaths?.me || 0),
+              duo: formatPercent(shares.deaths?.duo || 0)
+            },
+            damage: {
+              me: formatPercent(shares.damage?.me || 0),
+              duo: formatPercent(shares.damage?.duo || 0)
+            },
+            tank: {
+              me: formatPercent(shares.tank?.me || 0),
+              duo: formatPercent(shares.tank?.duo || 0)
+            },
+            support: support.total > 0
+              ? {
+                  me: formatPercent(shares.support?.me || 0),
+                  duo: formatPercent(shares.support?.duo || 0)
+                }
+              : null
+          }
+        : null,
+      supportTotals: support.total > 0
+        ? {
+            me: support.me || 0,
+            duo: support.duo || 0
+          }
+        : null,
+      availability: {
+        combatShares: hasCombatStats,
+        support: support.total > 0,
+        meta: Boolean(meta),
+        items: Boolean(items),
+        anvil: Boolean(anvil)
+      },
+      diversity: {
+        combined: diversity.combined || 0
+      },
+      meta: meta
+        ? {
+            meMetaRate: formatPercent(meta.me?.metaRate || 0),
+            duoMetaRate: formatPercent(meta.duo?.metaRate || 0),
+            meOffMetaRate: formatPercent(meta.me?.offMetaRate || 0),
+            duoOffMetaRate: formatPercent(meta.duo?.offMetaRate || 0)
+          }
+        : null,
+      items: items
+        ? {
+            meAvg: items.meAvg || 0,
+            duoAvg: items.duoAvg || 0,
+            meLowRate: formatPercent(items.lowRate?.me || 0),
+            duoLowRate: formatPercent(items.lowRate?.duo || 0)
+          }
+        : null,
+      anvil: anvil
+        ? {
+            meRate: formatPercent(anvil.meRate || 0),
+            duoRate: formatPercent(anvil.duoRate || 0),
+            meTop: anvil.meTop || "",
+            duoTop: anvil.duoTop || ""
+          }
+        : null
+    },
+    matches: matchItems
+  };
+
+  const slangLine = buildSlangLine(tone);
+  const system = [
+    "You generate a verdict, 4 roast cards, and short match moments for League of Legends Arena duos.",
+    "Arena is 2v2v2v2 with 8 teams; top 4 is a win; 1st place is the top spot.",
+    "Output JSON only with schema: {\"verdict\":\"...\",\"roasts\":[{\"title\":\"...\",\"body\":\"...\"}],\"moments\":[\"...\"]}.",
+    "Use only the provided facts and numbers; do not invent or infer extra stats.",
+    "Do not imply stats that are not explicitly provided.",
+    "Never mention first deaths, first blood, or 'first death' language.",
+    "Never mention ultimates, ults, or cooldowns.",
+    "Never mention crowns; say top-4 wins or first place instead.",
+    `You may use arena/league slang: ${slangLine}.`,
+    "No slurs or hateful language. Keep it playful, not personal.",
+    "Avoid profanity; 'inting/feeding' is allowed only if tone is savage.",
+    "Use deaths only if facts.deaths is present.",
+    "Tank share indicates damage taken; support share indicates healing + shielding.",
+    "Verdict: 2-4 sentences, banter not toxic.",
+    "Always share blame with Riot or RNG in a light way.",
+    "Avoid 'small sample size' unless games < 8.",
+    "Roasts: exactly 4. Titles 2-4 words, lowercase. Bodies 1-2 sentences.",
+    "Each roast must focus on a different aspect and mention each player at least once across the set.",
+    "Include a meta/off-meta card if meta data is present.",
+    "Moments: return one per match in the same order.",
+    "Each moment is 2-8 words, lowercase.",
+    "Use the provided hint and placement to keep meaning consistent.",
+    "Avoid 'ticket' phrases like 'ticket punched'.",
+    "If you mention champions, include both. Prefer the exact pairLabel string.",
+    "Never assign a champion to a specific player or use 'with X' for a single champ.",
+    "Avoid repeating the same phrase, verb, or result wording across the list."
+  ].join(" ");
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: `Payload JSON:\n${JSON.stringify(promptPayload, null, 2)}` }
+      ],
+      temperature: 0.85,
+      max_tokens: 420,
+      response_format: { type: "json_object" }
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`openai error: ${response.status} ${text}`);
+  }
+  const data = await response.json();
+  const raw = data.choices?.[0]?.message?.content || "";
+  let parsed;
+  try {
+    parsed = parseJsonLenient(raw);
+  } catch (error) {
+    throw new Error(error.message || "openai invalid json");
+  }
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("openai invalid bundle");
+  }
+  return parsed;
+}
+
+async function getAiBundle(summary, names, tone, insights, matches, fallbackRoasts, env, ctx, url, options = {}) {
+  const fallbackVerdict = buildVerdict(summary, names, tone, { fresh: true });
+  const fallbackMoments = Array.isArray(matches) ? matches.map((match) => match.highlight) : [];
+  if (!env.OPENAI_API_KEY) {
+    return {
+      verdict: fallbackVerdict,
+      roasts: fallbackRoasts,
+      moments: fallbackMoments,
+      sources: { verdict: "ai-fallback", roasts: "ai-fallback", moments: "ai-fallback" },
+      error: options.debug ? "missing OPENAI_API_KEY" : undefined
+    };
+  }
+  if (!insights) {
+    return {
+      verdict: fallbackVerdict,
+      roasts: fallbackRoasts,
+      moments: fallbackMoments,
+      sources: { verdict: "ai-fallback", roasts: "ai-fallback", moments: "ai-fallback" },
+      error: options.debug ? "missing insights" : undefined
+    };
+  }
+
+  const ttl = safeNumber(env.AI_BUNDLE_TTL_SECONDS, 86400);
+  const version = env.AI_BUNDLE_VERSION || "v1";
+  const fingerprint = buildAiBundleFingerprint(summary, insights, matches || [], tone);
+  const cache = caches.default;
+  const cacheUrl = new URL(url.origin + "/bundle/ai");
+  cacheUrl.searchParams.set("v", version);
+  cacheUrl.searchParams.set("key", fingerprint);
+  cacheUrl.searchParams.set("tone", tone);
+  cacheUrl.searchParams.set("me", normalizeName(names.me, "").toLowerCase());
+  cacheUrl.searchParams.set("duo", normalizeName(names.duo, "").toLowerCase());
+  const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
+  const cached = await cache.match(cacheKey);
+  if (cached) {
+    const cachedData = await cached.json();
+    if (cachedData && (cachedData.verdict || cachedData.roasts || cachedData.moments)) {
+      const verdict = collapseWhitespace(cachedData.verdict || "") || fallbackVerdict;
+      const roasts = normalizeAiRoasts(cachedData.roasts, fallbackRoasts);
+      const moments = normalizeAiMoments(cachedData.moments, fallbackMoments, matches || []);
+      const sources = cachedData.sources || {};
+      return {
+        verdict,
+        roasts,
+        moments,
+        sources: {
+          verdict: sources.verdict === "ai" ? "ai-cache" : (sources.verdict || "ai-fallback"),
+          roasts: sources.roasts === "ai" ? "ai-cache" : (sources.roasts || "ai-fallback"),
+          moments: sources.moments === "ai" ? "ai-cache" : (sources.moments || "ai-fallback")
+        },
+        error: options.debug ? null : undefined
+      };
+    }
+  }
+
+  try {
+    const rawBundle = await generateAiBundle(summary, names, tone, insights, matches || [], env);
+    const verdictText = collapseWhitespace(rawBundle.verdict || "");
+    const verdict = verdictText || fallbackVerdict;
+    const roasts = normalizeAiRoasts(rawBundle.roasts, fallbackRoasts);
+    const moments = normalizeAiMoments(rawBundle.moments, fallbackMoments, matches || []);
+    const verdictSource = verdictText ? "ai" : "ai-fallback";
+    const roastsSource = roasts === fallbackRoasts ? "ai-fallback" : "ai";
+    const momentsSource = moments === fallbackMoments ? "ai-fallback" : "ai";
+    const bundle = {
+      verdict,
+      roasts,
+      moments,
+      sources: { verdict: verdictSource, roasts: roastsSource, moments: momentsSource }
+    };
+    if (verdictSource === "ai" || roastsSource === "ai" || momentsSource === "ai") {
+      const cacheResponse = new Response(JSON.stringify(bundle), {
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": `public, max-age=${ttl}`
+        }
+      });
+      ctx.waitUntil(cache.put(cacheKey, cacheResponse.clone()));
+    }
+    return { ...bundle, error: options.debug ? null : undefined };
+  } catch (error) {
+    return {
+      verdict: fallbackVerdict,
+      roasts: fallbackRoasts,
+      moments: fallbackMoments,
+      sources: { verdict: "ai-fallback", roasts: "ai-fallback", moments: "ai-fallback" },
+      error: options.debug ? (error.message || "ai bundle error") : undefined
+    };
+  }
 }
 
 async function getAiRoasts(summary, names, tone, insights, fallback, env, ctx, url, options = {}) {
@@ -2313,20 +2612,26 @@ async function handleDuo(req, env, ctx) {
     }
 
     if (verdictStyle === "ai") {
-      const [aiVerdict, aiRoasts, aiMoments] = await Promise.all([
-        getAiVerdict(data.summary, data.meta.duo, tone, data.insights, env, ctx, url),
-        getAiRoasts(data.summary, data.meta.duo, tone, data.insights, roastsAuto, env, ctx, url),
-        getAiMoments(data.summary, data.meta.duo, tone, data.insights, data.matches || [], env, ctx, url)
-      ]);
-      data.meta.verdictSource = aiVerdict.source;
-      data.meta.roastsSource = aiRoasts.source;
-      data.meta.momentsSource = aiMoments.source;
-      data.verdict = aiVerdict.verdict;
-      data.roasts = aiRoasts.roasts;
-      if (Array.isArray(data.matches) && Array.isArray(aiMoments.moments)) {
+      const aiBundle = await getAiBundle(
+        data.summary,
+        data.meta.duo,
+        tone,
+        data.insights,
+        data.matches || [],
+        roastsAuto,
+        env,
+        ctx,
+        url
+      );
+      data.meta.verdictSource = aiBundle.sources.verdict;
+      data.meta.roastsSource = aiBundle.sources.roasts;
+      data.meta.momentsSource = aiBundle.sources.moments;
+      data.verdict = aiBundle.verdict;
+      data.roasts = aiBundle.roasts;
+      if (Array.isArray(data.matches) && Array.isArray(aiBundle.moments)) {
         data.matches = data.matches.map((match, index) => ({
           ...match,
-          highlight: aiMoments.moments[index] || match.highlight
+          highlight: aiBundle.moments[index] || match.highlight
         }));
       }
       return jsonResponse(data, 200, { "Cache-Control": "no-store" });
@@ -2480,20 +2785,26 @@ async function handleDuo(req, env, ctx) {
   let matchesFinal = matchesOut;
   const matchesForMoments = tagMatchChampions(matchesOut, tierInfo);
   if (verdictStyle === "ai") {
-    const [aiVerdict, aiRoasts, aiMoments] = await Promise.all([
-      getAiVerdict(summary, names, tone, insights, env, ctx, url),
-      getAiRoasts(summary, names, tone, insights, roastsAuto, env, ctx, url),
-      getAiMoments(summary, names, tone, insights, matchesForMoments, env, ctx, url)
-    ]);
-    verdictSource = aiVerdict.source;
-    verdict = aiVerdict.verdict;
-    roastsSource = aiRoasts.source;
-    roasts = aiRoasts.roasts;
-    momentsSource = aiMoments.source;
-    if (Array.isArray(matchesOut) && Array.isArray(aiMoments.moments)) {
+    const aiBundle = await getAiBundle(
+      summary,
+      names,
+      tone,
+      insights,
+      matchesForMoments,
+      roastsAuto,
+      env,
+      ctx,
+      url
+    );
+    verdictSource = aiBundle.sources.verdict;
+    verdict = aiBundle.verdict;
+    roastsSource = aiBundle.sources.roasts;
+    roasts = aiBundle.roasts;
+    momentsSource = aiBundle.sources.moments;
+    if (Array.isArray(matchesOut) && Array.isArray(aiBundle.moments)) {
       matchesFinal = matchesOut.map((match, index) => ({
         ...match,
-        highlight: aiMoments.moments[index] || match.highlight
+        highlight: aiBundle.moments[index] || match.highlight
       }));
     }
   }
