@@ -427,7 +427,7 @@
             <select id="verdict-style">
               <option value="auto">auto (cached)</option>
               <option value="fresh">fresh (no cache)</option>
-              <option value="ai" selected>ai (cached)</option>
+              <option value="ai" selected>ai (verdict + roasts)</option>
             </select>
           </label>
         </div>
@@ -875,6 +875,7 @@
     function renderMeta(data) {
       const source = data.meta.source || "api";
       const verdictMode = data.meta.verdictSource || normalizeVerdictStyle(document.getElementById("verdict-style").value);
+      const roastsMode = data.meta.roastsSource || "auto";
       const verdictLabel = verdictMode === "fresh"
         ? "fresh verdict"
         : verdictMode === "ai" || verdictMode === "ai-cache"
@@ -882,12 +883,21 @@
           : verdictMode === "ai-fallback"
             ? "fallback verdict"
             : "";
+      const roastsLabel = roastsMode === "ai" || roastsMode === "ai-cache"
+        ? "ai roasts"
+        : roastsMode === "ai-fallback"
+          ? "fallback roasts"
+          : "";
+      const labels = [];
+      if (verdictLabel) labels.push(verdictLabel);
+      if (roastsLabel) labels.push(roastsLabel);
+
       let statusText = source === "demo" ? "demo mode" : source === "cache" ? "cached stats" : "live data";
-      if (verdictLabel) {
-        statusText = statusText + " · " + verdictLabel;
+      if (labels.length) {
+        statusText = statusText + " · " + labels.join(" · ");
       }
       setStatus(statusText, source === "demo" ? "status-warn" : "status-ok");
-      const sourceText = verdictLabel ? `${source} (${verdictLabel})` : source;
+      const sourceText = labels.length ? `${source} (${labels.join(" · ")})` : source;
       dataSource.textContent = "data source: " + sourceText;
       duoTitle.innerHTML = formatDuoTitle(data.meta.duo);
       duoSub.textContent = "arena duo report for " + data.meta.duo.region.toUpperCase();

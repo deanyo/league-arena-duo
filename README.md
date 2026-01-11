@@ -49,9 +49,10 @@ Optional defaults (already in `worker/wrangler.toml`):
 - `DEFAULT_MATCHES`
 - `CACHE_TTL_SECONDS`
 - `AI_VERDICT_TTL_SECONDS`
+- `AI_ROASTS_TTL_SECONDS`
 - `OPENAI_MODEL`
 
-### AI verdicts (optional)
+### AI verdicts + roasts (optional)
 Set an OpenAI key to enable `verdict=ai`:
 ```bash
 cd worker
