@@ -311,6 +311,24 @@
     }
     .chip.top4 { color: var(--accent-3); }
     .chip.bottom4 { color: var(--danger); }
+    .champ-name {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tier-badge {
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .tier-s { color: var(--accent); border-color: var(--accent); }
+    .tier-a { color: var(--accent-3); border-color: var(--accent-3); }
+    .tier-b { color: var(--warn); border-color: var(--warn); }
+    .tier-c { color: var(--danger); border-color: var(--danger); }
+    .tier-d { color: var(--muted); border-color: var(--muted); }
     .verdict {
       font-size: 14px;
       line-height: 1.7;
@@ -468,9 +486,29 @@
           <div class="stat-sub" id="stat-first-sub">who hits grey screen first</div>
         </div>
         <div class="stat">
-          <div class="stat-label">unused ult deaths</div>
-          <div class="stat-value" id="stat-ult">--</div>
-          <div class="stat-sub" id="stat-ult-sub">ult held in pocket</div>
+          <div class="stat-label">damage share</div>
+          <div class="stat-value" id="stat-damage">--</div>
+          <div class="stat-sub" id="stat-damage-sub">me vs duo damage</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">tank share</div>
+          <div class="stat-value" id="stat-tank">--</div>
+          <div class="stat-sub" id="stat-tank-sub">damage soaked split</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">streak watch</div>
+          <div class="stat-value" id="stat-streak">--</div>
+          <div class="stat-sub" id="stat-streak-sub">top 4 / bottom 4 streak</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">champion pool</div>
+          <div class="stat-value" id="stat-pool">--</div>
+          <div class="stat-sub" id="stat-pool-sub">unique champs used</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">meta habits</div>
+          <div class="stat-value" id="stat-meta">--</div>
+          <div class="stat-sub" id="stat-meta-sub">S/A usage rate</div>
         </div>
         <div class="stat">
           <div class="stat-label">comfort pick bias</div>
@@ -565,6 +603,11 @@
       tone: "classic",
       verdict: "ai"
     };
+    const TIERLIST_URL = "./tierlist.json";
+    const CHAMPION_KEY_ALIASES = {
+      monkeyking: "wukong",
+      nunu: "nunuwillump"
+    };
 
     const apiStatus = document.getElementById("api-status");
     const apiTag = document.getElementById("api-tag");
@@ -582,8 +625,16 @@
     const statWinrateSub = document.getElementById("stat-winrate-sub");
     const statFirst = document.getElementById("stat-first");
     const statFirstSub = document.getElementById("stat-first-sub");
-    const statUlt = document.getElementById("stat-ult");
-    const statUltSub = document.getElementById("stat-ult-sub");
+    const statDamage = document.getElementById("stat-damage");
+    const statDamageSub = document.getElementById("stat-damage-sub");
+    const statTank = document.getElementById("stat-tank");
+    const statTankSub = document.getElementById("stat-tank-sub");
+    const statStreak = document.getElementById("stat-streak");
+    const statStreakSub = document.getElementById("stat-streak-sub");
+    const statPool = document.getElementById("stat-pool");
+    const statPoolSub = document.getElementById("stat-pool-sub");
+    const statMeta = document.getElementById("stat-meta");
+    const statMetaSub = document.getElementById("stat-meta-sub");
     const statComfort = document.getElementById("stat-comfort");
     const statComfortSub = document.getElementById("stat-comfort-sub");
     const statBlame = document.getElementById("stat-blame");
@@ -605,6 +656,12 @@
     const matchTable = document.getElementById("match-table");
     const verdict = document.getElementById("verdict");
 
+    let tierMap = new Map();
+    let tierListLoaded = false;
+    let tierListNames = [];
+    let lastData = null;
+    let lastChampionNames = [];
+
     const demoData = {
       meta: {
         source: "demo",
@@ -620,10 +677,21 @@
         firsts: 4,
         firstRate: "18%",
         firstDeaths: { me: 5, duo: 9 },
-        unusedUlts: { me: 2, duo: 6 },
         comfortBias: "MichyeoHEY",
         comfortPick: "jinx",
         duoIdentity: "all-in adventurers"
+      },
+      insights: {
+        streaks: { top4: 4, bottom4: 2 },
+        shares: {
+          damage: { me: 0.46, duo: 0.54 },
+          tank: { me: 0.58, duo: 0.42 }
+        },
+        diversity: { me: 9, duo: 12, combined: 14 },
+        meta: {
+          me: { metaRate: 0.62 },
+          duo: { metaRate: 0.48 }
+        }
       },
       blame: {
         me: { share: 0.34, reason: "tests limits early" },
@@ -700,6 +768,172 @@
       return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     }
 
+    function normalizeChampionKey(name) {
+      const key = String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      return CHAMPION_KEY_ALIASES[key] || key;
+    }
+
+    function buildTierMap(data) {
+      const map = new Map();
+      const tiers = (data && data.tiers) || {};
+      Object.entries(tiers).forEach(([tier, list]) => {
+        if (!Array.isArray(list)) return;
+        list.forEach((champion) => {
+          const key = normalizeChampionKey(champion);
+          if (key) map.set(key, tier);
+        });
+      });
+      return map;
+    }
+
+    function extractTierNames(data) {
+      const names = [];
+      const tiers = (data && data.tiers) || {};
+      Object.values(tiers).forEach((list) => {
+        if (!Array.isArray(list)) return;
+        list.forEach((name) => {
+          if (name) names.push(name);
+        });
+      });
+      return names;
+    }
+
+    function getChampionTier(name) {
+      if (!tierListLoaded || !name) return null;
+      const key = normalizeChampionKey(name);
+      return tierMap.get(key) || null;
+    }
+
+    function renderChampionList(container, champsText) {
+      container.textContent = "";
+      const raw = String(champsText || "").trim();
+      if (!raw) return;
+      const parts = raw.split(/\s*\+\s*/).map((part) => part.trim()).filter(Boolean);
+      parts.forEach((champion, index) => {
+        if (index > 0) {
+          container.appendChild(document.createTextNode(" + "));
+        }
+        const champSpan = document.createElement("span");
+        champSpan.className = "champ-name";
+        champSpan.textContent = champion;
+        const tier = getChampionTier(champion);
+        if (tier) {
+          const badge = document.createElement("span");
+          badge.className = "tier-badge tier-" + tier.toLowerCase();
+          badge.textContent = tier;
+          champSpan.appendChild(badge);
+        }
+        container.appendChild(champSpan);
+      });
+    }
+
+    function extractChampionNames(data) {
+      const names = new Set();
+      if (data?.summary?.comfortPick) {
+        names.add(data.summary.comfortPick);
+      }
+      (data?.matches || []).forEach((match) => {
+        if (!match || !match.champs) return;
+        String(match.champs)
+          .split(/\s*\+\s*/)
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .forEach((name) => names.add(name));
+      });
+      return Array.from(names);
+    }
+
+    function isBoundaryChar(char) {
+      return !char || !/[A-Za-z0-9]/.test(char);
+    }
+
+    function isBoundary(text, start, end) {
+      return isBoundaryChar(text[start - 1]) && isBoundaryChar(text[end]);
+    }
+
+    function findNextMarker(text, lowerText, start, markers) {
+      let best = null;
+      markers.forEach((marker) => {
+        let idx = lowerText.indexOf(marker.valueLower, start);
+        while (idx !== -1) {
+          const end = idx + marker.length;
+          if (isBoundary(text, idx, end)) {
+            const rank = marker.type === "player" ? 2 : 1;
+            if (
+              !best ||
+              idx < best.index ||
+              (idx === best.index && (marker.length > best.length || (marker.length === best.length && rank > best.rank)))
+            ) {
+              best = { ...marker, index: idx, length: marker.length, rank };
+            }
+            break;
+          }
+          idx = lowerText.indexOf(marker.valueLower, idx + 1);
+        }
+      });
+      return best;
+    }
+
+    function renderDecoratedText(target, text, names, championNames) {
+      target.textContent = "";
+      if (!text) return;
+      const markers = [];
+      if (names?.me) markers.push({ value: names.me, valueLower: names.me.toLowerCase(), length: names.me.length, type: "player", className: "name-me" });
+      if (names?.duo) markers.push({ value: names.duo, valueLower: names.duo.toLowerCase(), length: names.duo.length, type: "player", className: "name-duo" });
+      (championNames || []).forEach((name) => {
+        const tier = getChampionTier(name);
+        if (!tier) return;
+        markers.push({ value: name, valueLower: name.toLowerCase(), length: name.length, type: "champ", tier });
+      });
+      if (!markers.length) {
+        target.textContent = text;
+        return;
+      }
+      const lowerText = text.toLowerCase();
+      let cursor = 0;
+      while (cursor < text.length) {
+        const match = findNextMarker(text, lowerText, cursor, markers);
+        if (!match) {
+          target.appendChild(document.createTextNode(text.slice(cursor)));
+          break;
+        }
+        if (match.index > cursor) {
+          target.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+        }
+        const fragment = text.slice(match.index, match.index + match.length);
+        if (match.type === "player") {
+          const span = document.createElement("span");
+          span.className = match.className;
+          span.textContent = fragment;
+          target.appendChild(span);
+        } else {
+          const span = document.createElement("span");
+          span.className = "champ-name";
+          span.textContent = fragment;
+          const badge = document.createElement("span");
+          badge.className = "tier-badge tier-" + match.tier.toLowerCase();
+          badge.textContent = match.tier;
+          span.appendChild(badge);
+          target.appendChild(span);
+        }
+        cursor = match.index + match.length;
+      }
+    }
+
+    async function loadTierList() {
+      try {
+        const response = await fetch(TIERLIST_URL);
+        if (!response.ok) return;
+        const data = await response.json();
+        tierMap = buildTierMap(data);
+        tierListLoaded = true;
+        tierListNames = extractTierNames(data);
+        if (lastData) renderAll(lastData);
+      } catch (error) {
+        tierListLoaded = false;
+      }
+    }
+
     function highlightNames(text, names) {
       if (!text) return "";
       const namePairs = [
@@ -730,10 +964,33 @@
       return meValue > duoValue ? meName : duoName;
     }
 
+    function shareSummary(shares, names, tieMargin = 0.06) {
+      const meShare = typeof shares?.me === "number" ? shares.me : 0;
+      const duoShare = typeof shares?.duo === "number" ? shares.duo : 0;
+      if (meShare <= 0 && duoShare <= 0) {
+        return { leader: "no data", detail: "combat stats missing" };
+      }
+      if (Math.abs(meShare - duoShare) <= tieMargin) {
+        return {
+          leader: "tied",
+          detail: `${names.me} ${formatPercent(meShare)} vs ${names.duo} ${formatPercent(duoShare)}`
+        };
+      }
+      return {
+        leader: meShare > duoShare ? names.me : names.duo,
+        detail: `${names.me} ${formatPercent(meShare)} vs ${names.duo} ${formatPercent(duoShare)}`
+      };
+    }
+
     function renderSummary(data) {
       const summary = data.summary;
       const meta = data.meta;
       const matches = Array.isArray(data.matches) ? data.matches : [];
+      const insights = data.insights || {};
+      const shares = insights.shares || {};
+      const streaks = insights.streaks || {};
+      const diversity = insights.diversity || {};
+      const metaStats = insights.meta || null;
       const safeFirsts = Number.isFinite(summary.firsts)
         ? summary.firsts
         : matches.filter((match) => (match.placement || 0) === 1).length;
@@ -744,11 +1001,47 @@
       const firstLeader = leaderLabel(summary.firstDeaths.me, summary.firstDeaths.duo, meta.duo.me, meta.duo.duo);
       statFirst.innerHTML = highlightNames(firstLeader, meta.duo);
       statFirstSub.innerHTML = highlightNames(meta.duo.me + " " + summary.firstDeaths.me + " vs " + meta.duo.duo + " " + summary.firstDeaths.duo, meta.duo);
-      const ultLeader = leaderLabel(summary.unusedUlts.me, summary.unusedUlts.duo, meta.duo.me, meta.duo.duo);
-      statUlt.innerHTML = highlightNames(ultLeader, meta.duo);
-      statUltSub.innerHTML = highlightNames(meta.duo.me + " " + summary.unusedUlts.me + " vs " + meta.duo.duo + " " + summary.unusedUlts.duo, meta.duo);
+      const damageSummary = shareSummary(shares.damage, meta.duo);
+      statDamage.innerHTML = highlightNames(damageSummary.leader, meta.duo);
+      statDamageSub.innerHTML = highlightNames(damageSummary.detail, meta.duo);
+      const tankSummary = shareSummary(shares.tank, meta.duo);
+      statTank.innerHTML = highlightNames(tankSummary.leader, meta.duo);
+      statTankSub.innerHTML = highlightNames(tankSummary.detail, meta.duo);
+      const top4Streak = Number(streaks.top4 || 0);
+      const bottom4Streak = Number(streaks.bottom4 || 0);
+      if (top4Streak === 0 && bottom4Streak === 0) {
+        statStreak.textContent = "no streak";
+      } else if (top4Streak >= bottom4Streak) {
+        statStreak.textContent = "top 4 x" + top4Streak;
+      } else {
+        statStreak.textContent = "bottom 4 x" + bottom4Streak;
+      }
+      statStreakSub.textContent = "top 4 " + top4Streak + " / bottom 4 " + bottom4Streak;
+      const poolTotal = Number(diversity.combined || 0);
+      statPool.textContent = poolTotal ? poolTotal + " champs" : "--";
+      statPoolSub.textContent = "me " + (diversity.me || 0) + " / duo " + (diversity.duo || 0);
+      if (!metaStats) {
+        statMeta.textContent = "tier list offline";
+        statMetaSub.textContent = "no meta data";
+      } else {
+        const meRate = metaStats.me?.metaRate || 0;
+        const duoRate = metaStats.duo?.metaRate || 0;
+        const metaLeader = Math.abs(meRate - duoRate) <= 0.06
+          ? "balanced"
+          : meRate > duoRate
+            ? meta.duo.me
+            : meta.duo.duo;
+        statMeta.innerHTML = highlightNames(metaLeader, meta.duo);
+        statMetaSub.innerHTML = highlightNames(
+          meta.duo.me + " " + formatPercent(meRate) + " / " + meta.duo.duo + " " + formatPercent(duoRate) + " meta",
+          meta.duo
+        );
+      }
       statComfort.innerHTML = highlightNames(summary.comfortBias, meta.duo);
-      statComfortSub.textContent = "most played: " + summary.comfortPick;
+      statComfortSub.textContent = "most played: ";
+      const comfortSpan = document.createElement("span");
+      renderChampionList(comfortSpan, summary.comfortPick);
+      statComfortSub.appendChild(comfortSpan);
       const blame = data.blame;
       statBlame.textContent = Math.round(blame.me.share * 100) + " / " + Math.round(blame.duo.share * 100) + " / " + Math.round(blame.riot.share * 100);
       statBlameSub.textContent = "me / duo / riot";
@@ -772,7 +1065,7 @@
       blameRiotNote.textContent = blame.riot.reason;
     }
 
-    function renderRoasts(roasts, names) {
+    function renderRoasts(roasts, names, championNames) {
       clearList(roastList);
       roasts.forEach((roast) => {
         const item = document.createElement("li");
@@ -781,7 +1074,7 @@
         title.textContent = roast.title;
         const body = document.createElement("div");
         body.className = "list-body";
-        body.innerHTML = highlightNames(roast.body, names);
+        renderDecoratedText(body, roast.body, names, championNames);
         item.append(title, body);
         roastList.appendChild(item);
       });
@@ -825,7 +1118,7 @@
         const placement = document.createElement("span");
         placement.textContent = "place " + match.placement;
         const champs = document.createElement("span");
-        champs.textContent = match.champs;
+        renderChampionList(champs, match.champs);
         const highlight = document.createElement("span");
         highlight.textContent = match.highlight;
         row.append(result, placement, champs, highlight);
@@ -856,8 +1149,16 @@
       statWinrateSub.textContent = "check api key";
       statFirst.textContent = "--";
       statFirstSub.textContent = "no data";
-      statUlt.textContent = "--";
-      statUltSub.textContent = "no data";
+      statDamage.textContent = "--";
+      statDamageSub.textContent = "no data";
+      statTank.textContent = "--";
+      statTankSub.textContent = "no data";
+      statStreak.textContent = "--";
+      statStreakSub.textContent = "no data";
+      statPool.textContent = "--";
+      statPoolSub.textContent = "no data";
+      statMeta.textContent = "--";
+      statMetaSub.textContent = "no data";
       statComfort.textContent = "--";
       statComfortSub.textContent = "no data";
       statBlame.textContent = "--";
@@ -895,9 +1196,9 @@
       verdict.textContent = safeMessage;
     }
 
-    function renderVerdict(text, names) {
+    function renderVerdict(text, names, championNames) {
       const safeText = text || "no verdict yet";
-      verdict.innerHTML = highlightNames(safeText, names);
+      renderDecoratedText(verdict, safeText, names, championNames);
     }
 
     function renderMeta(data) {
@@ -932,12 +1233,16 @@
     }
 
     function renderAll(data) {
+      lastData = data;
+      lastChampionNames = tierListLoaded && tierListNames.length
+        ? tierListNames
+        : extractChampionNames(data);
       renderMeta(data);
       renderSummary(data);
       renderBlame(data);
-      renderRoasts(data.roasts || [], data.meta.duo);
+      renderRoasts(data.roasts || [], data.meta.duo, lastChampionNames);
       renderMatches(data.matches || []);
-      renderVerdict(data.verdict || "", data.meta.duo);
+      renderVerdict(data.verdict || "", data.meta.duo, lastChampionNames);
     }
 
     function normalizeInput(value, fallback) {
@@ -1069,6 +1374,8 @@
     });
 
     shareBtn.addEventListener("click", copyShareUrl);
+
+    loadTierList();
 
     const initialParams = paramsFromUrl();
     applyParams(initialParams);
