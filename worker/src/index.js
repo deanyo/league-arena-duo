@@ -896,6 +896,9 @@ function normalizePlayerMentions(text, names) {
       if (norm.length >= 6 && editDistance(norm, player.key) <= 1) {
         return `${player.name}${suffix}`;
       }
+      if (norm.length >= 6 && player.key.startsWith(norm) && player.key.length - norm.length <= 4) {
+        return `${player.name}${suffix}`;
+      }
     }
     return token;
   });
