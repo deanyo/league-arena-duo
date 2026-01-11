@@ -207,6 +207,147 @@ function formatFirsts(count) {
   return `${count} first-place finishes`;
 }
 
+function normalizeChampionKey(name) {
+  return String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+async function fetchTierList(env, ctx) {
+  const url = env.TIERLIST_URL || "https://raw.githubusercontent.com/deanyo/league-arena-duo/main/tierlist.json";
+  const ttl = safeNumber(env.TIERLIST_TTL_SECONDS, 86400);
+  const cache = caches.default;
+  const cacheKey = new Request(url, { method: "GET" });
+  const cached = await cache.match(cacheKey);
+  if (cached) {
+    return cached.json();
+  }
+
+  const response = await fetch(url, { headers: { "Accept": "application/json" } });
+  if (!response.ok) {
+    throw new Error(`tierlist fetch error: ${response.status}`);
+  }
+  const data = await response.json();
+  const cacheResponse = new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": `public, max-age=${ttl}`
+    }
+  });
+  ctx.waitUntil(cache.put(cacheKey, cacheResponse.clone()));
+  return data;
+}
+
+function buildTierMap(data) {
+  if (!data || typeof data !== "object") return null;
+  const tiers = data.tiers && typeof data.tiers === "object" ? data.tiers : data;
+  const map = {};
+  let total = 0;
+  ["S", "A", "B", "C", "D"].forEach((tier) => {
+    const entries = tiers[tier] || tiers[tier.toLowerCase()] || [];
+    if (!Array.isArray(entries)) return;
+    entries.forEach((name) => {
+      const key = normalizeChampionKey(name);
+      if (!key) return;
+      map[key] = tier;
+      total += 1;
+    });
+  });
+  return { map, total };
+}
+
+function buildMetaStats(championCounts, tierInfo) {
+  if (!tierInfo || !tierInfo.map || tierInfo.total < 10) return null;
+
+  function compute(counts) {
+    let total = 0;
+    let s = 0;
+    let a = 0;
+    let b = 0;
+    let c = 0;
+    let d = 0;
+    let unknown = 0;
+    Object.entries(counts).forEach(([champ, count]) => {
+      total += count;
+      const tier = tierInfo.map[normalizeChampionKey(champ)] || "U";
+      if (tier === "S") s += count;
+      else if (tier === "A") a += count;
+      else if (tier === "B") b += count;
+      else if (tier === "C") c += count;
+      else if (tier === "D") d += count;
+      else unknown += count;
+    });
+    if (total === 0) {
+      return { total: 0, sRate: 0, metaRate: 0, offMetaRate: 0 };
+    }
+    const meta = s + a;
+    const offMeta = c + d + unknown;
+    return {
+      total,
+      sRate: s / total,
+      metaRate: meta / total,
+      offMetaRate: offMeta / total
+    };
+  }
+
+  return {
+    me: compute(championCounts.me),
+    duo: compute(championCounts.duo)
+  };
+}
+
+function buildMetaRoast(metaStats, names, tone) {
+  if (!metaStats) return null;
+  const me = metaStats.me;
+  const duo = metaStats.duo;
+  if (me.total === 0 && duo.total === 0) return null;
+
+  const highMeta = 0.65;
+  const highS = 0.45;
+  const offMeta = 0.55;
+
+  const copy = {
+    gentle: {
+      metaLead: (leader, rate) => `${leader} leans on S/A tiers in ${formatPercent(rate)} of games. safe picks, soft landing.`,
+      sLead: (leader, rate) => `${leader} is in S-tier ${formatPercent(rate)} of the time. comfort is a strategy.`,
+      offBoth: (rate) => `both skip S/A tiers in ${formatPercent(rate)} of games. creative duo energy.`,
+      offLead: (leader, rate) => `${leader} skips S/A tiers in ${formatPercent(rate)} of games. off-meta pride.`
+    },
+    classic: {
+      metaLead: (leader, rate) => `${leader} locks S/A tiers in ${formatPercent(rate)} of games. meta loyalty program member.`,
+      sLead: (leader, rate) => `${leader} is on S-tier ${formatPercent(rate)} of the time. tier list scout reporting in.`,
+      offBoth: (rate) => `both skip S/A tiers in ${formatPercent(rate)} of games. off-meta respect.`,
+      offLead: (leader, rate) => `${leader} skips S/A tiers in ${formatPercent(rate)} of games. off-meta pride.`
+    },
+    savage: {
+      metaLead: (leader, rate) => `${leader} locks S/A tiers in ${formatPercent(rate)} of games. tier list disciple behavior.`,
+      sLead: (leader, rate) => `${leader} is on S-tier ${formatPercent(rate)} of the time. only the finest labels.`,
+      offBoth: (rate) => `both skip S/A tiers in ${formatPercent(rate)} of games. off-meta chaos enjoyers.`,
+      offLead: (leader, rate) => `${leader} skips S/A tiers in ${formatPercent(rate)} of games. off-meta gremlin energy.`
+    }
+  };
+
+  const toneCopy = copy[tone] || copy.classic;
+  const leader = me.metaRate >= duo.metaRate ? { name: names.me, data: me } : { name: names.duo, data: duo };
+  const offLeader = me.offMetaRate >= duo.offMetaRate ? { name: names.me, data: me } : { name: names.duo, data: duo };
+  const avgOffMeta = (me.offMetaRate + duo.offMetaRate) / 2;
+
+  if (leader.data.metaRate >= highMeta) {
+    const body = leader.data.sRate >= highS
+      ? toneCopy.sLead(leader.name, leader.data.sRate)
+      : toneCopy.metaLead(leader.name, leader.data.metaRate);
+    return { title: "tier list habits", body };
+  }
+
+  if (me.offMetaRate >= offMeta && duo.offMetaRate >= offMeta) {
+    return { title: "off-meta props", body: toneCopy.offBoth(avgOffMeta) };
+  }
+
+  if (offLeader.data.offMetaRate >= offMeta) {
+    return { title: "off-meta props", body: toneCopy.offLead(offLeader.name, offLeader.data.offMetaRate) };
+  }
+
+  return null;
+}
+
 function isArenaMatch(info) {
   if (!info) return false;
   if (info.gameMode === "CHERRY") return true;
@@ -328,7 +469,7 @@ function toneCopy(tone) {
   return copy[tone] || copy.classic;
 }
 
-function buildRoasts(summary, names, tone) {
+function buildRoasts(summary, names, tone, metaStats) {
   const copy = toneCopy(tone);
   const roasts = [];
   const firstLeader = summary.firstDeaths.me === summary.firstDeaths.duo
@@ -356,6 +497,11 @@ function buildRoasts(summary, names, tone) {
     ? copy.comfortTie(summary.comfortPick)
     : copy.comfortLead(summary.comfortPick, summary.comfortPickRate);
   roasts.push({ title: "comfort lock", body: comfortBody });
+
+  const metaRoast = buildMetaRoast(metaStats, names, tone);
+  if (metaRoast) {
+    roasts.push(metaRoast);
+  }
 
   roasts.push({
     title: "clutch window",
@@ -570,7 +716,16 @@ async function handleDuo(req, env, ctx) {
   const names = { me: mePlayer.name || meInput, duo: duoPlayer.name || duoInput };
   const summary = buildSummary(stats, names, matches);
   const blame = buildBlame(summary, names);
-  const roasts = buildRoasts(summary, names, tone);
+  let metaStats = null;
+  try {
+    const tierData = await fetchTierList(env, ctx);
+    const tierInfo = buildTierMap(tierData);
+    metaStats = buildMetaStats(stats.champions, tierInfo);
+  } catch (error) {
+    metaStats = null;
+  }
+
+  const roasts = buildRoasts(summary, names, tone, metaStats);
   const verdict = buildVerdict(summary, names, tone, { fresh: verdictStyle === "fresh" });
 
   const payload = {

@@ -10,6 +10,14 @@ endpoint is wired up.
 - Response shape should follow the `demoData` structure in `index.html`.
 - Inputs can be plain summoner names or Riot IDs (`name#TAG`), including op.gg-style `name-TAG`.
 
+## Tier List (Meta Roasts)
+Meta roasts pull from `tierlist.json`. Update the tiers as needed (manual or scripted).
+Champions missing from the list are treated as off-meta, so fill out the list for best results.
+
+Worker settings (in `worker/wrangler.toml`):
+- `TIERLIST_URL` (defaults to the raw GitHub URL for `tierlist.json`)
+- `TIERLIST_TTL_SECONDS` (defaults to 86400)
+
 ## Cloudflare Worker (Wrangler)
 Worker lives in `worker/`.
 
