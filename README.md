@@ -40,3 +40,4 @@ wrangler deploy
 ## Notes
 - URL params drive the UI, so any duo can be shared via the query string.
 - AI verdicts can be added server-side later and cached separately.
+- GitHub Pages will redirect to `https://dnyo.co.uk/league-arena-duo/` while the user site CNAME points to `dnyo.co.uk`.
