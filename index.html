@@ -541,9 +541,14 @@
           <div class="stat-sub" id="stat-tank-sub">damage soaked split</div>
         </div>
         <div class="stat">
-          <div class="stat-label">support share</div>
-          <div class="stat-value" id="stat-support">--</div>
-          <div class="stat-sub" id="stat-support-sub">healing + shielding split</div>
+          <div class="stat-label">healing share</div>
+          <div class="stat-value" id="stat-healing">--</div>
+          <div class="stat-sub" id="stat-healing-sub">healing split</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">shield share</div>
+          <div class="stat-value" id="stat-shield">--</div>
+          <div class="stat-sub" id="stat-shield-sub">shielding split</div>
         </div>
         <div class="stat">
           <div class="stat-label">streak watch</div>
@@ -684,8 +689,10 @@
     const statDamageSub = document.getElementById("stat-damage-sub");
     const statTank = document.getElementById("stat-tank");
     const statTankSub = document.getElementById("stat-tank-sub");
-    const statSupport = document.getElementById("stat-support");
-    const statSupportSub = document.getElementById("stat-support-sub");
+    const statHealing = document.getElementById("stat-healing");
+    const statHealingSub = document.getElementById("stat-healing-sub");
+    const statShield = document.getElementById("stat-shield");
+    const statShieldSub = document.getElementById("stat-shield-sub");
     const statStreak = document.getElementById("stat-streak");
     const statStreakSub = document.getElementById("stat-streak-sub");
     const statPool = document.getElementById("stat-pool");
@@ -751,6 +758,8 @@
           deaths: { me: 0.48, duo: 0.52 },
           damage: { me: 0.46, duo: 0.54 },
           tank: { me: 0.58, duo: 0.42 },
+          healing: { me: 0.52, duo: 0.48 },
+          shielding: { me: 0.45, duo: 0.55 },
           support: { me: 0.5, duo: 0.5 }
         },
         diversity: { me: 9, duo: 12, combined: 14 },
@@ -766,7 +775,8 @@
           breakdown: [
             { label: "execution", value: "deaths 19 (48%)" },
             { label: "impact", value: "damage share 48%" },
-            { label: "support", value: "support share 50%" },
+            { label: "healing", value: "healing 5,200 (52%)" },
+            { label: "shielding", value: "shielding 1,800 (45%)" },
             { label: "economy", value: "low items 22%" },
             { label: "meta", value: "S/A picks 41%" }
           ]
@@ -777,7 +787,8 @@
           breakdown: [
             { label: "execution", value: "deaths 21 (52%)" },
             { label: "impact", value: "damage share 52%" },
-            { label: "support", value: "support share 50%" },
+            { label: "healing", value: "healing 4,800 (48%)" },
+            { label: "shielding", value: "shielding 2,200 (55%)" },
             { label: "economy", value: "low items 28%" },
             { label: "meta", value: "S/A picks 55%" }
           ]
@@ -820,6 +831,12 @@
 
     function formatPercent(value) {
       return Math.round(value * 100) + "%";
+    }
+
+    function formatNumber(value) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return "0";
+      return Math.round(num).toLocaleString("en-US");
     }
 
     function displayNameFromInput(value) {
@@ -1110,14 +1127,51 @@
       const tankSummary = shareSummary(shares.tank, meta.duo);
       statTank.innerHTML = highlightNames(tankSummary.leader, meta.duo);
       statTankSub.innerHTML = highlightNames(tankSummary.detail, meta.duo);
-      const supportTotal = Number(insights.support?.total || 0);
-      if (supportTotal > 0) {
-        const supportSummary = shareSummary(shares.support, meta.duo);
-        statSupport.innerHTML = highlightNames(supportSummary.leader, meta.duo);
-        statSupportSub.innerHTML = highlightNames(supportSummary.detail, meta.duo);
+      const healingTotal = Number(insights.healing?.total || 0);
+      if (healingTotal > 0) {
+        const healingSummary = shareSummary(shares.healing, meta.duo);
+        statHealing.innerHTML = highlightNames(healingSummary.leader, meta.duo);
+        statHealingSub.innerHTML = highlightNames(
+          meta.duo.me +
+            " " +
+            formatNumber(insights.healing?.me || 0) +
+            " (" +
+            formatPercent(shares.healing?.me || 0) +
+            ") vs " +
+            meta.duo.duo +
+            " " +
+            formatNumber(insights.healing?.duo || 0) +
+            " (" +
+            formatPercent(shares.healing?.duo || 0) +
+            ")",
+          meta.duo
+        );
       } else {
-        statSupport.textContent = "none";
-        statSupportSub.textContent = "no healing or shielding logged";
+        statHealing.textContent = "none";
+        statHealingSub.textContent = "no healing logged";
+      }
+      const shieldTotal = Number(insights.shielding?.total || 0);
+      if (shieldTotal > 0) {
+        const shieldSummary = shareSummary(shares.shielding, meta.duo);
+        statShield.innerHTML = highlightNames(shieldSummary.leader, meta.duo);
+        statShieldSub.innerHTML = highlightNames(
+          meta.duo.me +
+            " " +
+            formatNumber(insights.shielding?.me || 0) +
+            " (" +
+            formatPercent(shares.shielding?.me || 0) +
+            ") vs " +
+            meta.duo.duo +
+            " " +
+            formatNumber(insights.shielding?.duo || 0) +
+            " (" +
+            formatPercent(shares.shielding?.duo || 0) +
+            ")",
+          meta.duo
+        );
+      } else {
+        statShield.textContent = "none";
+        statShieldSub.textContent = "no shielding logged";
       }
       const top4Streak = Number(streaks.top4 || 0);
       const bottom4Streak = Number(streaks.bottom4 || 0);
@@ -1296,8 +1350,10 @@
       statDamageSub.textContent = "no data";
       statTank.textContent = "--";
       statTankSub.textContent = "no data";
-      statSupport.textContent = "--";
-      statSupportSub.textContent = "no data";
+      statHealing.textContent = "--";
+      statHealingSub.textContent = "no data";
+      statShield.textContent = "--";
+      statShieldSub.textContent = "no data";
       statStreak.textContent = "--";
       statStreakSub.textContent = "no data";
       statPool.textContent = "--";

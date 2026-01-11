@@ -188,6 +188,11 @@ function formatPercent(value) {
   return Math.round(value * 100) + "%";
 }
 
+function formatNumber(value) {
+  if (!Number.isFinite(value)) return "0";
+  return Math.round(value).toLocaleString("en-US");
+}
+
 function formatChampion(name) {
   if (!name) return "unknown";
   return name.replace(/([a-z])([A-Z])/g, "$1 $2");
@@ -296,6 +301,8 @@ function buildFallbackInsights(summary, matches) {
       deaths: { me: 0, duo: 0 },
       damage: { me: 0, duo: 0 },
       tank: { me: 0, duo: 0 },
+      healing: { me: 0, duo: 0 },
+      shielding: { me: 0, duo: 0 },
       support: { me: 0, duo: 0 }
     },
     perGame: {
@@ -348,7 +355,23 @@ function normalizeCachedPayload(data) {
       deaths: { me: 0, duo: 0 },
       damage: { me: 0, duo: 0 },
       tank: { me: 0, duo: 0 },
+      healing: { me: 0, duo: 0 },
+      shielding: { me: 0, duo: 0 },
       support: { me: 0, duo: 0 }
+    };
+  }
+  if (!insights.shares.healing) {
+    const healTotal = insights.healing?.total || 0;
+    insights.shares.healing = {
+      me: healTotal > 0 ? (insights.healing?.me || 0) / healTotal : 0,
+      duo: healTotal > 0 ? (insights.healing?.duo || 0) / healTotal : 0
+    };
+  }
+  if (!insights.shares.shielding) {
+    const shieldTotal = insights.shielding?.total || 0;
+    insights.shares.shielding = {
+      me: shieldTotal > 0 ? (insights.shielding?.me || 0) / shieldTotal : 0,
+      duo: shieldTotal > 0 ? (insights.shielding?.duo || 0) / shieldTotal : 0
     };
   }
   if (!insights.shares.support) {
@@ -477,6 +500,8 @@ function buildInsights(stats, summary, metaStats) {
       deaths: { me: share(stats.deaths.me, deathsTotal), duo: share(stats.deaths.duo, deathsTotal) },
       damage: { me: share(stats.damage.me, damageTotal), duo: share(stats.damage.duo, damageTotal) },
       tank: { me: share(stats.damageTaken.me, damageTakenTotal), duo: share(stats.damageTaken.duo, damageTakenTotal) },
+      healing: { me: share(stats.healing.me, healingTotal), duo: share(stats.healing.duo, healingTotal) },
+      shielding: { me: share(stats.shielding.me, shieldingTotal), duo: share(stats.shielding.duo, shieldingTotal) },
       support: {
         me: share((stats.healing.me || 0) + (stats.shielding.me || 0), supportTotal),
         duo: share((stats.healing.duo || 0) + (stats.shielding.duo || 0), supportTotal)
@@ -1362,10 +1387,15 @@ function buildRoasts(summary, names, tone, metaStats, insights) {
   if (tankLeader) {
     addUnique(pool, { title: "frontline tax", body: copy.tankLead(tankLeader.name, tankLeader.share) });
   }
-  const supportLeader = pickDominant(shares?.support);
+  const supportTotal = insights?.support?.total || 0;
+  const supportPerGame = summary.games > 0 ? supportTotal / summary.games : 0;
+  const supportRelevant = supportPerGame >= 1200;
+  const supportLeader = supportRelevant ? pickDominant(shares?.support) : null;
   if (supportLeader) {
-    addUnique(pool, { title: "support share", body: copy.supportLead(supportLeader.name, supportLeader.share) });
-  } else if (isBalanced(shares?.support) && (insights?.support?.total || 0) > 0) {
+    const supportRoast = { title: "support diff", body: copy.supportLead(supportLeader.name, supportLeader.share) };
+    addUnique(pool, supportRoast);
+    addUnique(fallback, supportRoast);
+  } else if (supportRelevant && isBalanced(shares?.support)) {
     addUnique(pool, { title: "support split", body: copy.supportTie });
   }
 
@@ -1513,9 +1543,9 @@ function buildBlame(summary, names, insights) {
   const executionScore = (share) => (hasCombatStats ? Math.max((share || 0) - 0.5, 0) * 12 : 0);
   const impactShare = (damageShare, supportShare) => Math.max(damageShare || 0, supportShare || 0);
   const impactScore = (share) => (hasCombatStats ? Math.max(0.5 - (share || 0), 0) * 10 : 0);
-  const frontlineCredit = (share) => (hasCombatStats ? Math.max((share || 0) - 0.52, 0) * 3 : 0);
+  const frontlineCredit = (share) => (hasCombatStats ? Math.max((share || 0) - 0.5, 0) * 4 : 0);
   const frontlinePenalty = (tankShare, impactShareValue) =>
-    hasCombatStats && tankShare >= 0.58 && impactShareValue <= 0.4 ? 1.2 : 0;
+    hasCombatStats && tankShare >= 0.68 && impactShareValue <= 0.32 ? 1.0 : 0;
   const economyScore = (rate) => (rate || 0) * 6;
   const metaScore = (rate) => {
     if (!Number.isFinite(rate) || summary.winRate >= 0.5) return 0;
@@ -1597,6 +1627,10 @@ function buildBlame(summary, names, insights) {
 
   const formatShare = (value) => (Number.isFinite(value) ? formatPercent(value) : "--");
   const deathShare = (count) => (totalDeaths > 0 ? formatPercent(count / totalDeaths) : "0%");
+  const supportLine = (label, count, share) => {
+    if (!Number.isFinite(count) || count <= 0) return `no ${label} data`;
+    return `${label} ${formatNumber(count)} (${formatShare(share)})`;
+  };
   const economyLine = (rate, anvilRate) => {
     if (!Number.isFinite(rate)) return "no item data";
     const base = `low items ${formatPercent(rate)}`;
@@ -1606,20 +1640,19 @@ function buildBlame(summary, names, insights) {
     return base;
   };
 
-  const supportLine = (supportShare) => hasCombatStats
-    ? `support share ${formatShare(supportShare)}`
-    : "no combat data";
   const meBreakdown = [
     { label: "execution", value: `deaths ${deathsMe} (${deathShare(deathsMe)})` },
     { label: "impact", value: hasCombatStats ? `damage share ${formatShare(shares.damage?.me)}` : "no combat data" },
-    { label: "support", value: supportLine(shares.support?.me) },
+    { label: "healing", value: supportLine("healing", insights?.healing?.me, shares.healing?.me) },
+    { label: "shielding", value: supportLine("shielding", insights?.shielding?.me, shares.shielding?.me) },
     { label: "economy", value: economyLine(items?.lowRate?.me, anvil?.meRate) },
     { label: "meta", value: meta ? `S/A picks ${formatShare(meta.me?.metaRate)}` : "meta offline" }
   ];
   const duoBreakdown = [
     { label: "execution", value: `deaths ${deathsDuo} (${deathShare(deathsDuo)})` },
     { label: "impact", value: hasCombatStats ? `damage share ${formatShare(shares.damage?.duo)}` : "no combat data" },
-    { label: "support", value: supportLine(shares.support?.duo) },
+    { label: "healing", value: supportLine("healing", insights?.healing?.duo, shares.healing?.duo) },
+    { label: "shielding", value: supportLine("shielding", insights?.shielding?.duo, shares.shielding?.duo) },
     { label: "economy", value: economyLine(items?.lowRate?.duo, anvil?.duoRate) },
     { label: "meta", value: meta ? `S/A picks ${formatShare(meta.duo?.metaRate)}` : "meta offline" }
   ];
