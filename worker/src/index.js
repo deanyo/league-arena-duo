@@ -287,13 +287,16 @@ function buildFallbackInsights(summary, matches) {
     damage: { me: 0, duo: 0, total: 0 },
     damageTaken: { me: 0, duo: 0, total: 0 },
     healing: { me: 0, duo: 0, total: 0 },
+    shielding: { me: 0, duo: 0, total: 0 },
+    support: { me: 0, duo: 0, total: 0 },
     gold: { me: 0, duo: 0, total: 0 },
     shares: {
       kills: { me: 0, duo: 0 },
       assists: { me: 0, duo: 0 },
       deaths: { me: 0, duo: 0 },
       damage: { me: 0, duo: 0 },
-      tank: { me: 0, duo: 0 }
+      tank: { me: 0, duo: 0 },
+      support: { me: 0, duo: 0 }
     },
     perGame: {
       damage: 0,
@@ -328,6 +331,32 @@ function normalizeCachedPayload(data) {
   if (!data.insights) {
     data.insights = buildFallbackInsights(summary, matches);
   }
+  const insights = data.insights;
+  if (!insights.shielding) {
+    insights.shielding = { me: 0, duo: 0, total: 0 };
+  }
+  const supportMe = (insights.healing?.me || 0) + (insights.shielding?.me || 0);
+  const supportDuo = (insights.healing?.duo || 0) + (insights.shielding?.duo || 0);
+  const supportTotal = supportMe + supportDuo;
+  if (!insights.support) {
+    insights.support = { me: supportMe, duo: supportDuo, total: supportTotal };
+  }
+  if (!insights.shares) {
+    insights.shares = {
+      kills: { me: 0, duo: 0 },
+      assists: { me: 0, duo: 0 },
+      deaths: { me: 0, duo: 0 },
+      damage: { me: 0, duo: 0 },
+      tank: { me: 0, duo: 0 },
+      support: { me: 0, duo: 0 }
+    };
+  }
+  if (!insights.shares.support) {
+    insights.shares.support = {
+      me: supportTotal > 0 ? supportMe / supportTotal : 0,
+      duo: supportTotal > 0 ? supportDuo / supportTotal : 0
+    };
+  }
   const names = data.meta?.duo || { me: "me", duo: "duo" };
   data.blame = buildBlame(summary, names, data.insights);
   if (!Number.isFinite(summary.top4Streak) || !Number.isFinite(summary.bottom4Streak)) {
@@ -349,6 +378,8 @@ function buildVerdictFingerprint(summary, insights, tone) {
     avgPlacement,
     deathsShare.me || 0,
     deathsShare.duo || 0,
+    insights?.shares?.support?.me || 0,
+    insights?.shares?.support?.duo || 0,
     String(summary.comfortBias || "").toLowerCase(),
     String(summary.comfortPick || "").toLowerCase(),
     summary.comfortPickRate || ""
@@ -373,6 +404,8 @@ function buildRoastFingerprint(summary, insights, tone) {
     insights?.streaks?.bottom4 || 0,
     insights?.damage?.total || 0,
     insights?.damageTaken?.total || 0,
+    insights?.healing?.total || 0,
+    insights?.shielding?.total || 0,
     insights?.kills?.total || 0,
     insights?.assists?.total || 0,
     insights?.deaths?.total || 0,
@@ -399,6 +432,8 @@ function buildInsights(stats, summary, metaStats) {
   const damageTotal = sum(stats.damage);
   const damageTakenTotal = sum(stats.damageTaken);
   const healingTotal = sum(stats.healing);
+  const shieldingTotal = sum(stats.shielding);
+  const supportTotal = healingTotal + shieldingTotal;
   const goldTotal = sum(stats.gold);
   const hasCombatStats = damageTotal > 0 || killsTotal > 0 || assistsTotal > 0 || deathsTotal > 0;
 
@@ -429,13 +464,23 @@ function buildInsights(stats, summary, metaStats) {
     damage: { me: stats.damage.me, duo: stats.damage.duo, total: damageTotal },
     damageTaken: { me: stats.damageTaken.me, duo: stats.damageTaken.duo, total: damageTakenTotal },
     healing: { me: stats.healing.me, duo: stats.healing.duo, total: healingTotal },
+    shielding: { me: stats.shielding.me, duo: stats.shielding.duo, total: shieldingTotal },
+    support: {
+      me: (stats.healing.me || 0) + (stats.shielding.me || 0),
+      duo: (stats.healing.duo || 0) + (stats.shielding.duo || 0),
+      total: supportTotal
+    },
     gold: { me: stats.gold.me, duo: stats.gold.duo, total: goldTotal },
     shares: {
       kills: { me: share(stats.kills.me, killsTotal), duo: share(stats.kills.duo, killsTotal) },
       assists: { me: share(stats.assists.me, assistsTotal), duo: share(stats.assists.duo, assistsTotal) },
       deaths: { me: share(stats.deaths.me, deathsTotal), duo: share(stats.deaths.duo, deathsTotal) },
       damage: { me: share(stats.damage.me, damageTotal), duo: share(stats.damage.duo, damageTotal) },
-      tank: { me: share(stats.damageTaken.me, damageTakenTotal), duo: share(stats.damageTaken.duo, damageTakenTotal) }
+      tank: { me: share(stats.damageTaken.me, damageTakenTotal), duo: share(stats.damageTaken.duo, damageTakenTotal) },
+      support: {
+        me: share((stats.healing.me || 0) + (stats.shielding.me || 0), supportTotal),
+        duo: share((stats.healing.duo || 0) + (stats.shielding.duo || 0), supportTotal)
+      }
     },
     perGame: {
       damage: perGame(damageTotal),
@@ -529,6 +574,7 @@ async function generateAiVerdict(summary, names, tone, insights, env) {
   const shares = insights?.shares || {};
   const deaths = insights?.deaths || {};
   const hasCombatStats = Boolean(insights?.flags?.hasCombatStats);
+  const support = insights?.support || {};
   const promptPayload = {
     players: [names.me, names.duo],
     tone,
@@ -550,6 +596,30 @@ async function generateAiVerdict(summary, names, tone, insights, env) {
             }
           }
         : null,
+      shares: hasCombatStats
+        ? {
+            damage: {
+              me: formatPercent(shares.damage?.me || 0),
+              duo: formatPercent(shares.damage?.duo || 0)
+            },
+            tank: {
+              me: formatPercent(shares.tank?.me || 0),
+              duo: formatPercent(shares.tank?.duo || 0)
+            },
+            support: support.total > 0
+              ? {
+                  me: formatPercent(shares.support?.me || 0),
+                  duo: formatPercent(shares.support?.duo || 0)
+                }
+              : null
+          }
+        : null,
+      supportTotals: support.total > 0
+        ? {
+            me: support.me || 0,
+            duo: support.duo || 0
+          }
+        : null,
       comfortBias: summary.comfortBias,
       comfortPick: summary.comfortPick
     }
@@ -562,6 +632,7 @@ async function generateAiVerdict(summary, names, tone, insights, env) {
     "Do not imply stats that are not explicitly provided.",
     "Never mention first deaths, first blood, or 'first death' language.",
     "Use deaths only if facts.deaths is present.",
+    "Tank share indicates damage taken; support share indicates healing + shielding.",
     "2-4 sentences, banter not toxic, no profanity or slurs.",
     "Always share blame with Riot or RNG in a light way.",
     "Avoid 'small sample size' unless games < 8."
@@ -648,6 +719,7 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
   const items = insights?.items || null;
   const anvil = insights?.anvil || null;
   const deaths = insights?.deaths || {};
+  const support = insights?.support || {};
   const promptPayload = {
     players: [names.me, names.duo],
     tone,
@@ -694,11 +766,18 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
             tank: {
               me: formatPercent(shares.tank?.me || 0),
               duo: formatPercent(shares.tank?.duo || 0)
-            }
+            },
+            support: support.total > 0
+              ? {
+                  me: formatPercent(shares.support?.me || 0),
+                  duo: formatPercent(shares.support?.duo || 0)
+                }
+              : null
           }
         : null,
       availability: {
         combatShares: hasCombatStats,
+        support: support.total > 0,
         meta: Boolean(meta),
         items: Boolean(items),
         anvil: Boolean(anvil)
@@ -743,6 +822,7 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
     "Never mention first deaths, first blood, or 'first death' language.",
     "Use deaths only if facts.deaths is present.",
     "Only mention combat share stats if facts.availability.combatShares is true.",
+    "Tank share signals frontline work; support share is healing + shielding. Don't frame tank share as bad unless impact is low.",
     "Avoid repeating the same fact across cards.",
     "Mention each player at least once across the set.",
     "Include a meta/off-meta card if meta data is present.",
@@ -1071,6 +1151,8 @@ function buildHighlight(me, duo, placement, seed) {
   const damage = (me.totalDamageDealtToChampions || 0) + (duo.totalDamageDealtToChampions || 0);
   const damageTaken = (me.totalDamageTaken || 0) + (duo.totalDamageTaken || 0);
   const healing = (me.totalHeal || 0) + (duo.totalHeal || 0);
+  const shielding = (me.totalDamageShieldedOnTeammates || 0) + (duo.totalDamageShieldedOnTeammates || 0);
+  const support = healing + shielding;
   const ultCasts = (me.spell4Casts || 0) + (duo.spell4Casts || 0);
   const meItems = countItems(me);
   const duoItems = countItems(duo);
@@ -1102,7 +1184,7 @@ function buildHighlight(me, duo, placement, seed) {
   if (damageTaken >= damage * 1.3 && damageTaken >= 20000) add("frontline tax paid");
   if (assists >= kills + 8) add("setup for days");
   if (kills >= assists + 8) add("finisher instincts");
-  if (healing >= 9000) add("sustain clinic");
+  if (support >= 9000) add("sustain clinic");
   if (ultCasts === 0) add("ultimates on vacation");
   if (ultCasts >= 12) add("ults on cooldown");
   if (placement <= 4 && deaths > kills) add("survived the chaos");
@@ -1128,6 +1210,8 @@ function toneCopy(tone) {
       damageLead: (leader, share) => `${leader} handles ${formatPercent(share)} of duo damage. steady carry energy.`,
       damageTie: "damage is split almost evenly. shared workload, shared glory.",
       tankLead: (leader, share) => `${leader} absorbs ${formatPercent(share)} of the damage. frontline heart.`,
+      supportLead: (leader, share) => `${leader} covers ${formatPercent(share)} of healing + shielding. lifeguard energy.`,
+      supportTie: "healing + shielding is split evenly. shared sustain.",
       assistLead: (leader, share) => `${leader} owns ${formatPercent(share)} of the assists. setup artist energy.`,
       killLead: (leader, share) => `${leader} claims ${formatPercent(share)} of the kills. finisher instincts.`,
       deathLead: (leader, share) => `${leader} holds ${formatPercent(share)} of the deaths. brave positioning.`,
@@ -1153,6 +1237,8 @@ function toneCopy(tone) {
       damageLead: (leader, share) => `${leader} deals ${formatPercent(share)} of duo damage. backpack tax applied.`,
       damageTie: "damage is split down the middle. shared workload, shared blame.",
       tankLead: (leader, share) => `${leader} absorbs ${formatPercent(share)} of incoming damage. frontline tax payer.`,
+      supportLead: (leader, share) => `${leader} handles ${formatPercent(share)} of healing + shielding. support diff noted.`,
+      supportTie: "healing + shielding is split down the middle. shared sustain.",
       assistLead: (leader, share) => `${leader} owns ${formatPercent(share)} of the assists. setup artist energy.`,
       killLead: (leader, share) => `${leader} takes ${formatPercent(share)} of the kills. finisher aura.`,
       deathLead: (leader, share) => `${leader} holds ${formatPercent(share)} of the deaths. grey screen familiar.`,
@@ -1178,6 +1264,8 @@ function toneCopy(tone) {
       damageLead: (leader, share) => `${leader} delivers ${formatPercent(share)} of duo damage. backpack surcharge applied.`,
       damageTie: "damage is split evenly. co-op blame agreement signed.",
       tankLead: (leader, share) => `${leader} absorbs ${formatPercent(share)} of the damage. frontline tax paid in full.`,
+      supportLead: (leader, share) => `${leader} handles ${formatPercent(share)} of healing + shielding. support diff confirmed.`,
+      supportTie: "healing + shielding split evenly. no carry in sight.",
       assistLead: (leader, share) => `${leader} owns ${formatPercent(share)} of the assists. setup bot energy.`,
       killLead: (leader, share) => `${leader} takes ${formatPercent(share)} of the kills. finisher privileges.`,
       deathLead: (leader, share) => `${leader} holds ${formatPercent(share)} of the deaths. grey screen loyalist.`,
@@ -1274,6 +1362,12 @@ function buildRoasts(summary, names, tone, metaStats, insights) {
   if (tankLeader) {
     addUnique(pool, { title: "frontline tax", body: copy.tankLead(tankLeader.name, tankLeader.share) });
   }
+  const supportLeader = pickDominant(shares?.support);
+  if (supportLeader) {
+    addUnique(pool, { title: "support share", body: copy.supportLead(supportLeader.name, supportLeader.share) });
+  } else if (isBalanced(shares?.support) && (insights?.support?.total || 0) > 0) {
+    addUnique(pool, { title: "support split", body: copy.supportTie });
+  }
 
   const killLeader = pickDominant(shares?.kills);
   if (killLeader) {
@@ -1329,7 +1423,7 @@ function buildRoasts(summary, names, tone, metaStats, insights) {
   addUnique(fallback, clutchRoast);
   addUnique(pool, clutchRoast);
 
-  const seed = Math.floor(summary.winRate * 1000) + summary.games * 13 + summary.firsts * 19 + summary.firstDeaths.duo * 7;
+  const seed = Math.floor(summary.winRate * 1000) + summary.games * 13 + summary.firsts * 19 + (insights?.deaths?.duo || 0) * 7;
   const shuffled = shuffleWithSeed(pool, seed);
   const selected = [];
   shuffled.forEach((roast) => {
@@ -1417,7 +1511,11 @@ function buildBlame(summary, names, insights) {
   const closeRate = games > 0 ? closeExits / games : 0;
 
   const executionScore = (share) => (hasCombatStats ? Math.max((share || 0) - 0.5, 0) * 12 : 0);
+  const impactShare = (damageShare, supportShare) => Math.max(damageShare || 0, supportShare || 0);
   const impactScore = (share) => (hasCombatStats ? Math.max(0.5 - (share || 0), 0) * 10 : 0);
+  const frontlineCredit = (share) => (hasCombatStats ? Math.max((share || 0) - 0.52, 0) * 3 : 0);
+  const frontlinePenalty = (tankShare, impactShareValue) =>
+    hasCombatStats && tankShare >= 0.58 && impactShareValue <= 0.4 ? 1.2 : 0;
   const economyScore = (rate) => (rate || 0) * 6;
   const metaScore = (rate) => {
     if (!Number.isFinite(rate) || summary.winRate >= 0.5) return 0;
@@ -1427,23 +1525,45 @@ function buildBlame(summary, names, insights) {
   };
   const anvilScore = (rate) => (summary.winRate < 0.5 && rate >= 0.3 ? 1.4 : 0);
 
+  const meImpactShare = impactShare(shares.damage?.me, shares.support?.me);
+  const duoImpactShare = impactShare(shares.damage?.duo, shares.support?.duo);
   const meScores = {
     execution: executionScore(shares.deaths?.me),
-    impact: impactScore(shares.damage?.me),
+    impact: impactScore(meImpactShare),
     economy: economyScore(items?.lowRate?.me),
     meta: metaScore(meta?.me?.metaRate),
     anvil: anvilScore(anvil?.meRate)
   };
   const duoScores = {
     execution: executionScore(shares.deaths?.duo),
-    impact: impactScore(shares.damage?.duo),
+    impact: impactScore(duoImpactShare),
     economy: economyScore(items?.lowRate?.duo),
     meta: metaScore(meta?.duo?.metaRate),
     anvil: anvilScore(anvil?.duoRate)
   };
 
-  const meScore = 1 + meScores.execution + meScores.impact + meScores.economy + meScores.meta + meScores.anvil;
-  const duoScore = 1 + duoScores.execution + duoScores.impact + duoScores.economy + duoScores.meta + duoScores.anvil;
+  const meScore = Math.max(
+    0.2,
+    1 +
+      meScores.execution +
+      meScores.impact +
+      meScores.economy +
+      meScores.meta +
+      meScores.anvil +
+      frontlinePenalty(shares.tank?.me || 0, meImpactShare) -
+      frontlineCredit(shares.tank?.me || 0)
+  );
+  const duoScore = Math.max(
+    0.2,
+    1 +
+      duoScores.execution +
+      duoScores.impact +
+      duoScores.economy +
+      duoScores.meta +
+      duoScores.anvil +
+      frontlinePenalty(shares.tank?.duo || 0, duoImpactShare) -
+      frontlineCredit(shares.tank?.duo || 0)
+  );
 
   const volatilityScore = placementStdDev >= 1.8 ? 3 : placementStdDev >= 1.4 ? 2 : placementStdDev >= 1.1 ? 1 : 0;
   const closeScore = closeRate >= 0.4 ? 2 : closeRate >= 0.25 ? 1 : 0;
@@ -1486,15 +1606,20 @@ function buildBlame(summary, names, insights) {
     return base;
   };
 
+  const supportLine = (supportShare) => hasCombatStats
+    ? `support share ${formatShare(supportShare)}`
+    : "no combat data";
   const meBreakdown = [
     { label: "execution", value: `deaths ${deathsMe} (${deathShare(deathsMe)})` },
     { label: "impact", value: hasCombatStats ? `damage share ${formatShare(shares.damage?.me)}` : "no combat data" },
+    { label: "support", value: supportLine(shares.support?.me) },
     { label: "economy", value: economyLine(items?.lowRate?.me, anvil?.meRate) },
     { label: "meta", value: meta ? `S/A picks ${formatShare(meta.me?.metaRate)}` : "meta offline" }
   ];
   const duoBreakdown = [
     { label: "execution", value: `deaths ${deathsDuo} (${deathShare(deathsDuo)})` },
     { label: "impact", value: hasCombatStats ? `damage share ${formatShare(shares.damage?.duo)}` : "no combat data" },
+    { label: "support", value: supportLine(shares.support?.duo) },
     { label: "economy", value: economyLine(items?.lowRate?.duo, anvil?.duoRate) },
     { label: "meta", value: meta ? `S/A picks ${formatShare(meta.duo?.metaRate)}` : "meta offline" }
   ];
@@ -1653,6 +1778,7 @@ async function handleDuo(req, env, ctx) {
     damage: { me: 0, duo: 0 },
     damageTaken: { me: 0, duo: 0 },
     healing: { me: 0, duo: 0 },
+    shielding: { me: 0, duo: 0 },
     gold: { me: 0, duo: 0 },
     placements: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0 },
     top4Streak: 0,
@@ -1722,6 +1848,8 @@ async function handleDuo(req, env, ctx) {
     stats.damageTaken.duo += duoParticipant.totalDamageTaken || 0;
     stats.healing.me += meParticipant.totalHeal || 0;
     stats.healing.duo += duoParticipant.totalHeal || 0;
+    stats.shielding.me += meParticipant.totalDamageShieldedOnTeammates || 0;
+    stats.shielding.duo += duoParticipant.totalDamageShieldedOnTeammates || 0;
     stats.gold.me += meParticipant.goldEarned || 0;
     stats.gold.duo += duoParticipant.goldEarned || 0;
     const meItemCount = countItems(meParticipant);

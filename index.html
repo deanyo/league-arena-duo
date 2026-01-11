@@ -541,6 +541,11 @@
           <div class="stat-sub" id="stat-tank-sub">damage soaked split</div>
         </div>
         <div class="stat">
+          <div class="stat-label">support share</div>
+          <div class="stat-value" id="stat-support">--</div>
+          <div class="stat-sub" id="stat-support-sub">healing + shielding split</div>
+        </div>
+        <div class="stat">
           <div class="stat-label">streak watch</div>
           <div class="stat-value" id="stat-streak">--</div>
           <div class="stat-sub" id="stat-streak-sub">top 4 / bottom 4 streak</div>
@@ -679,6 +684,8 @@
     const statDamageSub = document.getElementById("stat-damage-sub");
     const statTank = document.getElementById("stat-tank");
     const statTankSub = document.getElementById("stat-tank-sub");
+    const statSupport = document.getElementById("stat-support");
+    const statSupportSub = document.getElementById("stat-support-sub");
     const statStreak = document.getElementById("stat-streak");
     const statStreakSub = document.getElementById("stat-streak-sub");
     const statPool = document.getElementById("stat-pool");
@@ -737,10 +744,14 @@
       insights: {
         streaks: { top4: 4, bottom4: 2 },
         deaths: { me: 19, duo: 21 },
+        healing: { me: 5200, duo: 4800, total: 10000 },
+        shielding: { me: 1800, duo: 2200, total: 4000 },
+        support: { me: 7000, duo: 7000, total: 14000 },
         shares: {
           deaths: { me: 0.48, duo: 0.52 },
           damage: { me: 0.46, duo: 0.54 },
-          tank: { me: 0.58, duo: 0.42 }
+          tank: { me: 0.58, duo: 0.42 },
+          support: { me: 0.5, duo: 0.5 }
         },
         diversity: { me: 9, duo: 12, combined: 14 },
         meta: {
@@ -751,10 +762,11 @@
       blame: {
         me: {
           share: 0.34,
-          reason: "first to fall",
+          reason: "death share",
           breakdown: [
             { label: "execution", value: "deaths 19 (48%)" },
             { label: "impact", value: "damage share 48%" },
+            { label: "support", value: "support share 50%" },
             { label: "economy", value: "low items 22%" },
             { label: "meta", value: "S/A picks 41%" }
           ]
@@ -765,6 +777,7 @@
           breakdown: [
             { label: "execution", value: "deaths 21 (52%)" },
             { label: "impact", value: "damage share 52%" },
+            { label: "support", value: "support share 50%" },
             { label: "economy", value: "low items 28%" },
             { label: "meta", value: "S/A picks 55%" }
           ]
@@ -1097,6 +1110,15 @@
       const tankSummary = shareSummary(shares.tank, meta.duo);
       statTank.innerHTML = highlightNames(tankSummary.leader, meta.duo);
       statTankSub.innerHTML = highlightNames(tankSummary.detail, meta.duo);
+      const supportTotal = Number(insights.support?.total || 0);
+      if (supportTotal > 0) {
+        const supportSummary = shareSummary(shares.support, meta.duo);
+        statSupport.innerHTML = highlightNames(supportSummary.leader, meta.duo);
+        statSupportSub.innerHTML = highlightNames(supportSummary.detail, meta.duo);
+      } else {
+        statSupport.textContent = "none";
+        statSupportSub.textContent = "no healing or shielding logged";
+      }
       const top4Streak = Number(streaks.top4 || 0);
       const bottom4Streak = Number(streaks.bottom4 || 0);
       if (top4Streak === 0 && bottom4Streak === 0) {
@@ -1274,6 +1296,8 @@
       statDamageSub.textContent = "no data";
       statTank.textContent = "--";
       statTankSub.textContent = "no data";
+      statSupport.textContent = "--";
+      statSupportSub.textContent = "no data";
       statStreak.textContent = "--";
       statStreakSub.textContent = "no data";
       statPool.textContent = "--";
