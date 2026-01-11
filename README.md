@@ -18,6 +18,21 @@ Worker settings (in `worker/wrangler.toml`):
 - `TIERLIST_URL` (defaults to the raw GitHub URL for `tierlist.json`)
 - `TIERLIST_TTL_SECONDS` (defaults to 86400)
 
+### Update script
+Use `scripts/update-tierlist.js` to convert a simple text list into `tierlist.json`.
+It accepts a file (`--input`) or stdin, and supports `S:`/`A:`/`B:`/`C:`/`D:` blocks.
+
+Example:
+```bash
+cat <<'EOF' > tiers.txt
+S: Ahri, Jinx, Ashe
+A: Ezreal, Swain
+B: Nami
+EOF
+
+node scripts/update-tierlist.js --input tiers.txt
+```
+
 ## Cloudflare Worker (Wrangler)
 Worker lives in `worker/`.
 
