@@ -520,26 +520,41 @@ async function generateAiVerdict(summary, names, tone, env) {
   const model = env.OPENAI_MODEL || "gpt-4o-mini";
   const games = summary.games || 0;
   const wins = summary.wins || 0;
+  const losses = Math.max(games - wins, 0);
+  const avgPlacement = Number.isFinite(summary.avgPlacement) ? Number(summary.avgPlacement.toFixed(2)) : 0;
+  const firstDeathsMe = summary.firstDeaths?.me || 0;
+  const firstDeathsDuo = summary.firstDeaths?.duo || 0;
+  const unusedUltsMe = summary.unusedUlts?.me || 0;
+  const unusedUltsDuo = summary.unusedUlts?.duo || 0;
   const promptPayload = {
     players: [names.me, names.duo],
     tone,
     arenaContext: "2v2v2v2v2v2v2v2, 8 teams, top 4 is a win, 1st is the crown",
-    games,
-    top4Wins: wins,
-    bottom4Losses: Math.max(games - wins, 0),
-    top4Rate: formatPercent(summary.winRate),
-    firsts: summary.firsts || 0,
-    avgPlacement: Number.isFinite(summary.avgPlacement) ? Number(summary.avgPlacement.toFixed(2)) : 0,
-    firstDeaths: summary.firstDeaths,
-    unusedUlts: summary.unusedUlts,
-    comfortBias: summary.comfortBias,
-    comfortPick: summary.comfortPick
+    facts: {
+      games,
+      top4Wins: wins,
+      bottom4Losses: losses,
+      top4Rate: formatPercent(summary.winRate),
+      firsts: summary.firsts || 0,
+      avgPlacement,
+      firstDeaths: {
+        me: firstDeathsMe,
+        duo: firstDeathsDuo
+      },
+      unusedUlts: {
+        me: unusedUltsMe,
+        duo: unusedUltsDuo
+      },
+      comfortBias: summary.comfortBias,
+      comfortPick: summary.comfortPick
+    }
   };
 
   const system = [
     "You write short, playful verdicts for League of Legends Arena duos.",
     "Arena is 2v2v2v2 with 8 teams; top 4 is a win; 1st place is the crown.",
-    "Use the provided stats only; do not invent numbers or facts.",
+    "Use the provided facts only; do not invent numbers, events, or qualitative claims.",
+    "Do not imply stats that are not explicitly provided.",
     "2-4 sentences, banter not toxic, no profanity or slurs.",
     "Always share blame with Riot or RNG in a light way.",
     "Avoid 'small sample size' unless games < 8."
@@ -613,26 +628,94 @@ async function getAiVerdict(summary, names, tone, env, ctx, url) {
 
 async function generateAiRoasts(summary, names, tone, insights, env) {
   const model = env.OPENAI_MODEL || "gpt-4o-mini";
+  const games = summary.games || 0;
+  const wins = summary.wins || 0;
+  const losses = Math.max(games - wins, 0);
+  const avgPlacement = Number.isFinite(summary.avgPlacement) ? Number(summary.avgPlacement.toFixed(2)) : 0;
+  const firstDeathsMe = summary.firstDeaths?.me || 0;
+  const firstDeathsDuo = summary.firstDeaths?.duo || 0;
+  const unusedUltsMe = summary.unusedUlts?.me || 0;
+  const unusedUltsDuo = summary.unusedUlts?.duo || 0;
+  const shares = insights?.shares || {};
+  const streaks = insights?.streaks || { top4: 0, bottom4: 0 };
+  const diversity = insights?.diversity || { combined: 0 };
+  const placements = insights?.placements || {};
+  const meta = insights?.meta || null;
+  const items = insights?.items || null;
+  const anvil = insights?.anvil || null;
   const promptPayload = {
     players: [names.me, names.duo],
     tone,
     arenaContext: "2v2v2v2v2v2v2v2, 8 teams, top 4 is a win, 1st is the crown",
-    games: summary.games || 0,
-    top4Wins: summary.wins || 0,
-    bottom4Losses: Math.max((summary.games || 0) - (summary.wins || 0), 0),
-    firsts: summary.firsts || 0,
-    avgPlacement: Number.isFinite(summary.avgPlacement) ? Number(summary.avgPlacement.toFixed(2)) : 0,
-    firstDeaths: summary.firstDeaths,
-    unusedUlts: summary.unusedUlts,
-    comfortPick: summary.comfortPick,
-    comfortBias: summary.comfortBias,
-    streaks: insights?.streaks,
-    placements: insights?.placements,
-    shares: insights?.shares,
-    diversity: insights?.diversity,
-    meta: insights?.meta,
-    items: insights?.items,
-    anvil: insights?.anvil
+    facts: {
+      games,
+      top4Wins: wins,
+      bottom4Losses: losses,
+      top4Rate: formatPercent(summary.winRate),
+      firsts: summary.firsts || 0,
+      avgPlacement,
+      firstDeaths: {
+        me: firstDeathsMe,
+        duo: firstDeathsDuo
+      },
+      unusedUlts: {
+        me: unusedUltsMe,
+        duo: unusedUltsDuo
+      },
+      comfortPick: summary.comfortPick,
+      comfortBias: summary.comfortBias,
+      placements,
+      streaks,
+      shares: {
+        kills: {
+          me: formatPercent(shares.kills?.me || 0),
+          duo: formatPercent(shares.kills?.duo || 0)
+        },
+        assists: {
+          me: formatPercent(shares.assists?.me || 0),
+          duo: formatPercent(shares.assists?.duo || 0)
+        },
+        deaths: {
+          me: formatPercent(shares.deaths?.me || 0),
+          duo: formatPercent(shares.deaths?.duo || 0)
+        },
+        damage: {
+          me: formatPercent(shares.damage?.me || 0),
+          duo: formatPercent(shares.damage?.duo || 0)
+        },
+        tank: {
+          me: formatPercent(shares.tank?.me || 0),
+          duo: formatPercent(shares.tank?.duo || 0)
+        }
+      },
+      diversity: {
+        combined: diversity.combined || 0
+      },
+      meta: meta
+        ? {
+            meMetaRate: formatPercent(meta.me?.metaRate || 0),
+            duoMetaRate: formatPercent(meta.duo?.metaRate || 0),
+            meOffMetaRate: formatPercent(meta.me?.offMetaRate || 0),
+            duoOffMetaRate: formatPercent(meta.duo?.offMetaRate || 0)
+          }
+        : null,
+      items: items
+        ? {
+            meAvg: items.meAvg || 0,
+            duoAvg: items.duoAvg || 0,
+            meLowRate: formatPercent(items.lowRate?.me || 0),
+            duoLowRate: formatPercent(items.lowRate?.duo || 0)
+          }
+        : null,
+      anvil: anvil
+        ? {
+            meRate: formatPercent(anvil.meRate || 0),
+            duoRate: formatPercent(anvil.duoRate || 0),
+            meTop: anvil.meTop || "",
+            duoTop: anvil.duoTop || ""
+          }
+        : null
+    }
   };
 
   const system = [
@@ -640,8 +723,9 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
     "Arena is 2v2v2v2 with 8 teams; top 4 is a win; 1st place is the crown.",
     "Output JSON only with schema: {\"roasts\":[{\"title\":\"...\",\"body\":\"...\"}]}",
     "Titles: 2-4 words, lowercase. Bodies: 1-2 sentences.",
-    "Use only the provided stats; do not invent numbers or facts.",
-    "Avoid repeating the same stat focus across cards.",
+    "Use only the provided facts and numbers; do not invent or infer extra stats.",
+    "Do not use comparative claims unless the exact percentage is provided.",
+    "Avoid repeating the same fact across cards.",
     "Mention each player at least once across the set.",
     "Include a meta/off-meta card if meta data is present.",
     "No profanity or slurs. Avoid 'small sample size' unless games < 8."
