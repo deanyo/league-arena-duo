@@ -563,7 +563,7 @@ function normalizeAiRoasts(roasts, fallback) {
   return cleaned.slice(0, 4);
 }
 
-function normalizeAiMoments(moments, fallback) {
+function normalizeAiMoments(moments, fallback, matches) {
   if (!Array.isArray(moments) || !Array.isArray(fallback)) return fallback;
   const target = fallback.length;
   if (target === 0) return fallback;
@@ -576,6 +576,22 @@ function normalizeAiMoments(moments, fallback) {
     if (!candidate || used.has(candidate.toLowerCase())) {
       result.push(fallback[i]);
       continue;
+    }
+    const match = Array.isArray(matches) ? matches[i] : null;
+    const pairLabel = match?.champsTagged
+      ? match.champsTagged.join(" + ")
+      : match?.champs || "";
+    if (match && pairLabel) {
+      const tokens = (match.champsTagged || String(match.champs || "").split(" + "))
+        .map((name) => String(name || "").replace(/\s*\[[A-Z]\]\s*$/i, "").trim())
+        .filter(Boolean);
+      const lower = candidate.toLowerCase();
+      const mentionsAny = tokens.some((token) => token && lower.includes(token.toLowerCase()));
+      const hasPair = lower.includes(pairLabel.toLowerCase());
+      if (mentionsAny && !hasPair) {
+        result.push(fallback[i]);
+        continue;
+      }
     }
     used.add(candidate.toLowerCase());
     result.push(candidate);
@@ -923,14 +939,15 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
 async function generateAiMoments(summary, names, tone, matches, env) {
   const model = env.OPENAI_MODEL || "gpt-4o-mini";
   const items = (matches || []).map((match, index) => {
-    const champs = Array.isArray(match.champsTagged)
-      ? match.champsTagged
-      : String(match.champs || "").split(" + ").map((name) => name.trim()).filter(Boolean);
+      const champs = Array.isArray(match.champsTagged)
+        ? match.champsTagged
+        : String(match.champs || "").split(" + ").map((name) => name.trim()).filter(Boolean);
     return {
       index,
       placement: match.placement || 0,
       result: match.resultLabel || match.result || "",
       champions: champs,
+      pairLabel: champs.join(" + "),
       hint: match.highlight || ""
     };
   });
@@ -949,7 +966,9 @@ async function generateAiMoments(summary, names, tone, matches, env) {
     "Never mention first deaths, first blood, or 'first death' language.",
     "Never mention crowns; say wins or first place instead.",
     "Use the provided hint and placement to keep meaning consistent.",
-    "Prefer mentioning a champion name, and include tier tags like [S]/[A] if provided.",
+    "If you mention champions, use the exact pairLabel string.",
+    "Never assign a champion to a specific player or use 'with X' for a single champ.",
+    "Prefer including a champion pair when it's interesting.",
     "Avoid repeating the same phrase across the list."
   ].join(" ");
 
@@ -1057,7 +1076,7 @@ async function getAiMoments(summary, names, tone, insights, matches, env, ctx, u
   if (cached) {
     const cachedData = await cached.json();
     if (cachedData && Array.isArray(cachedData.moments)) {
-      const normalized = normalizeAiMoments(cachedData.moments, matches.map((match) => match.highlight));
+      const normalized = normalizeAiMoments(cachedData.moments, matches.map((match) => match.highlight), matches);
       return { moments: normalized, source: "ai-cache" };
     }
   }
@@ -1065,7 +1084,7 @@ async function getAiMoments(summary, names, tone, insights, matches, env, ctx, u
   try {
     const rawMoments = await generateAiMoments(summary, names, tone, matches, env);
     const fallback = matches.map((match) => match.highlight);
-    const moments = normalizeAiMoments(rawMoments, fallback);
+    const moments = normalizeAiMoments(rawMoments, fallback, matches);
     const source = moments === fallback ? "ai-fallback" : "ai";
     if (source === "ai") {
       const cacheResponse = new Response(JSON.stringify({ moments }), {
