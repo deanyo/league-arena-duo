@@ -334,6 +334,12 @@
       color: var(--muted);
       text-transform: lowercase;
     }
+    .name-me,
+    .name-duo {
+      font-weight: 600;
+    }
+    .name-me { color: var(--accent-3); }
+    .name-duo { color: var(--accent-2); }
     .status-warn { color: var(--warn); }
     .status-ok { color: var(--accent-3); }
     .status-bad { color: var(--danger); }
@@ -476,13 +482,13 @@
       </div>
       <div class="blame-grid">
         <div class="blame-card">
-          <div class="blame-label" id="blame-me-label">summoner</div>
+          <div class="blame-label name-me" id="blame-me-label">summoner</div>
           <div class="blame-value" id="blame-me">--</div>
           <div class="blame-bar"><span id="blame-me-bar"></span></div>
           <div class="blame-note" id="blame-me-note">loading data</div>
         </div>
         <div class="blame-card">
-          <div class="blame-label" id="blame-duo-label">duo</div>
+          <div class="blame-label name-duo" id="blame-duo-label">duo</div>
           <div class="blame-value" id="blame-duo">--</div>
           <div class="blame-bar"><span id="blame-duo-bar"></span></div>
           <div class="blame-note" id="blame-duo-note">loading data</div>
@@ -642,6 +648,48 @@
       return Math.round(value * 100) + "%";
     }
 
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (char) => {
+        const map = {
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          "\"": "&quot;",
+          "'": "&#39;"
+        };
+        return map[char] || char;
+      });
+    }
+
+    function escapeRegExp(value) {
+      return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function highlightNames(text, names) {
+      if (!text) return "";
+      const namePairs = [
+        { value: names.me, className: "name-me" },
+        { value: names.duo, className: "name-duo" }
+      ]
+        .filter((entry) => entry.value)
+        .sort((a, b) => b.value.length - a.value.length);
+
+      let output = escapeHtml(text);
+      namePairs.forEach((entry) => {
+        const safeName = escapeHtml(entry.value);
+        if (!safeName) return;
+        const regex = new RegExp(escapeRegExp(safeName), "gi");
+        output = output.replace(regex, (match) => `<span class="${entry.className}">${match}</span>`);
+      });
+      return output;
+    }
+
+    function formatDuoTitle(names) {
+      const me = names && names.me ? escapeHtml(names.me) : "me";
+      const duo = names && names.duo ? escapeHtml(names.duo) : "duo";
+      return `<span class="name-me">${me}</span> + <span class="name-duo">${duo}</span>`;
+    }
+
     function leaderLabel(meValue, duoValue, meName, duoName) {
       if (meValue === duoValue) return "tied";
       return meValue > duoValue ? meName : duoName;
@@ -655,12 +703,12 @@
       statWinrate.textContent = formatPercent(summary.winRate);
       statWinrateSub.textContent = summary.wins + " wins / " + (summary.games - summary.wins) + " losses";
       const firstLeader = leaderLabel(summary.firstDeaths.me, summary.firstDeaths.duo, meta.duo.me, meta.duo.duo);
-      statFirst.textContent = firstLeader;
-      statFirstSub.textContent = meta.duo.me + " " + summary.firstDeaths.me + " vs " + meta.duo.duo + " " + summary.firstDeaths.duo;
+      statFirst.innerHTML = highlightNames(firstLeader, meta.duo);
+      statFirstSub.innerHTML = highlightNames(meta.duo.me + " " + summary.firstDeaths.me + " vs " + meta.duo.duo + " " + summary.firstDeaths.duo, meta.duo);
       const ultLeader = leaderLabel(summary.unusedUlts.me, summary.unusedUlts.duo, meta.duo.me, meta.duo.duo);
-      statUlt.textContent = ultLeader;
-      statUltSub.textContent = meta.duo.me + " " + summary.unusedUlts.me + " vs " + meta.duo.duo + " " + summary.unusedUlts.duo;
-      statComfort.textContent = summary.comfortBias;
+      statUlt.innerHTML = highlightNames(ultLeader, meta.duo);
+      statUltSub.innerHTML = highlightNames(meta.duo.me + " " + summary.unusedUlts.me + " vs " + meta.duo.duo + " " + summary.unusedUlts.duo, meta.duo);
+      statComfort.innerHTML = highlightNames(summary.comfortBias, meta.duo);
       statComfortSub.textContent = "most played: " + summary.comfortPick;
       const blame = data.blame;
       statBlame.textContent = Math.round(blame.me.share * 100) + " / " + Math.round(blame.duo.share * 100) + " / " + Math.round(blame.riot.share * 100);
@@ -685,7 +733,7 @@
       blameRiotNote.textContent = blame.riot.reason;
     }
 
-    function renderRoasts(roasts) {
+    function renderRoasts(roasts, names) {
       clearList(roastList);
       roasts.forEach((roast) => {
         const item = document.createElement("li");
@@ -694,7 +742,7 @@
         title.textContent = roast.title;
         const body = document.createElement("div");
         body.className = "list-body";
-        body.textContent = roast.body;
+        body.innerHTML = highlightNames(roast.body, names);
         item.append(title, body);
         roastList.appendChild(item);
       });
@@ -723,8 +771,9 @@
       });
     }
 
-    function renderVerdict(text) {
-      verdict.textContent = text || "no verdict yet";
+    function renderVerdict(text, names) {
+      const safeText = text || "no verdict yet";
+      verdict.innerHTML = highlightNames(safeText, names);
     }
 
     function renderMeta(data) {
@@ -732,7 +781,7 @@
       const statusText = source === "demo" ? "demo mode" : source === "cache" ? "cached data" : "live data";
       setStatus(statusText, source === "demo" ? "status-warn" : "status-ok");
       dataSource.textContent = "data source: " + source;
-      duoTitle.textContent = data.meta.duo.me + " + " + data.meta.duo.duo;
+      duoTitle.innerHTML = formatDuoTitle(data.meta.duo);
       duoSub.textContent = "arena duo report for " + data.meta.duo.region.toUpperCase();
     }
 
@@ -740,9 +789,9 @@
       renderMeta(data);
       renderSummary(data);
       renderBlame(data);
-      renderRoasts(data.roasts || []);
+      renderRoasts(data.roasts || [], data.meta.duo);
       renderMatches(data.matches || []);
-      renderVerdict(data.verdict || "");
+      renderVerdict(data.verdict || "", data.meta.duo);
     }
 
     function normalizeInput(value, fallback) {
