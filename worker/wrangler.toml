@@ -1,0 +1,10 @@
+name = "league-arena-duo"
+main = "src/index.js"
+compatibility_date = "2024-10-01"
+
+[vars]
+DEFAULT_REGION = "euw"
+DEFAULT_ME = "deanyo"
+DEFAULT_DUO = "cerri"
+DEFAULT_MATCHES = "25"
+CACHE_TTL_SECONDS = "3600"

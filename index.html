@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1a1621">
+  <title>Arena Duo Roast</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256' viewBox='0 0 256 256'><rect width='256' height='256' fill='%231a1621'/><text x='128' y='155' text-anchor='middle' font-family='JetBrains%20Mono,monospace' font-size='96' font-weight='600' fill='%23b3f4f3'>AD</text></svg>">
+  <style>
+    :root {
+      --bg-0: #14111b;
+      --bg-1: #1a1621;
+      --bg-2: #231f32;
+      --bg-3: #2a2540;
+      --ink: #eee9fc;
+      --muted: #9a90b3;
+      --line: #3f3951;
+      --accent: #b3f4f3;
+      --accent-2: #e192ef;
+      --accent-3: #b1f2a7;
+      --warn: #f0c27b;
+      --danger: #e965a5;
+      --shadow: rgba(0, 0, 0, 0.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "JetBrains Mono", "SF Mono", Consolas, monospace;
+      color: var(--ink);
+      background: radial-gradient(1000px 600px at 8% -20%, #2b2436, transparent),
+        radial-gradient(700px 500px at 90% -10%, #1c2a35, transparent),
+        linear-gradient(160deg, var(--bg-0), var(--bg-1) 40%, var(--bg-0));
+      min-height: 100vh;
+      padding: 24px;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(transparent 95%, rgba(255, 255, 255, 0.03)),
+        linear-gradient(90deg, transparent 95%, rgba(255, 255, 255, 0.02));
+      background-size: 40px 40px;
+      pointer-events: none;
+      opacity: 0.4;
+      mix-blend-mode: screen;
+    }
+    .shell {
+      max-width: 1080px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+    .hero {
+      display: flex;
+      gap: 24px;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 24px;
+    }
+    .hero-title {
+      font-family: "Space Grotesk", "JetBrains Mono", sans-serif;
+      font-size: 36px;
+      letter-spacing: -0.02em;
+      margin: 0 0 6px 0;
+      color: var(--accent);
+    }
+    .hero-sub {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      text-transform: lowercase;
+    }
+    .hero-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--accent-3);
+      font-size: 11px;
+      text-transform: lowercase;
+      background: rgba(34, 31, 50, 0.6);
+      box-shadow: 0 6px 18px var(--shadow);
+    }
+    .hero-tag .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 12px currentColor;
+    }
+    .panel {
+      background: var(--bg-2);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 18px;
+      box-shadow: 0 10px 30px var(--shadow);
+      animation: rise 0.6s ease both;
+    }
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 12px;
+      gap: 12px;
+    }
+    .panel h2 {
+      margin: 0;
+      font-size: 13px;
+      text-transform: lowercase;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+    }
+    .panel-note {
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .field span {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: lowercase;
+    }
+    input, select, textarea {
+      background: var(--bg-1);
+      border: 1px solid var(--line);
+      color: var(--ink);
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    input::placeholder, textarea::placeholder { color: var(--muted); }
+    textarea {
+      min-height: 72px;
+      resize: vertical;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+      text-transform: lowercase;
+    }
+    .btn.primary {
+      background: var(--accent);
+      color: #1a1621;
+      border-color: transparent;
+      box-shadow: 0 10px 20px rgba(179, 244, 243, 0.2);
+    }
+    .btn:active {
+      transform: translateY(1px);
+    }
+    .hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 10px;
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .stat {
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(26, 22, 33, 0.7);
+    }
+    .stat-label {
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: lowercase;
+      margin-bottom: 6px;
+    }
+    .stat-value {
+      font-size: 18px;
+      color: var(--accent-3);
+      font-weight: 600;
+    }
+    .stat-sub {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+    .blame-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .blame-card {
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(26, 22, 33, 0.65);
+    }
+    .blame-label {
+      font-size: 11px;
+      text-transform: lowercase;
+      color: var(--accent-2);
+    }
+    .blame-value {
+      font-size: 18px;
+      font-weight: 600;
+      margin-top: 6px;
+    }
+    .blame-bar {
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      margin: 10px 0 6px;
+    }
+    .blame-bar span {
+      display: block;
+      height: 100%;
+      background: linear-gradient(120deg, var(--accent-3), var(--accent));
+      width: 0;
+    }
+    .blame-note {
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+    .list li {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: rgba(26, 22, 33, 0.6);
+    }
+    .list-title {
+      font-size: 11px;
+      color: var(--accent-2);
+      margin-bottom: 6px;
+      text-transform: lowercase;
+    }
+    .list-body {
+      font-size: 12px;
+      color: var(--ink);
+    }
+    .match-table {
+      display: grid;
+      gap: 8px;
+    }
+    .match-row {
+      display: grid;
+      grid-template-columns: 0.7fr 1fr 1fr 1.2fr;
+      gap: 8px;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(20, 17, 27, 0.6);
+      font-size: 11px;
+      align-items: center;
+    }
+    .match-row strong { color: var(--ink); }
+    .match-row span { color: var(--muted); }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      text-transform: lowercase;
+      font-size: 10px;
+      background: rgba(26, 22, 33, 0.7);
+      color: var(--muted);
+      width: fit-content;
+    }
+    .chip.win { color: var(--accent-3); }
+    .chip.loss { color: var(--danger); }
+    .verdict {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--ink);
+      background: rgba(26, 22, 33, 0.55);
+      border: 1px solid var(--line);
+      padding: 12px;
+      border-radius: 10px;
+    }
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 20px;
+      color: var(--muted);
+      font-size: 11px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .footer a {
+      color: var(--muted);
+      text-decoration: none;
+    }
+    .footer a:hover { color: var(--accent); }
+    .badge {
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: lowercase;
+    }
+    .status-warn { color: var(--warn); }
+    .status-ok { color: var(--accent-3); }
+    .status-bad { color: var(--danger); }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 960px) {
+      .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .blame-grid { grid-template-columns: 1fr; }
+      .match-row { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      body { padding: 16px; }
+      .hero { flex-direction: column; align-items: flex-start; }
+      .field-grid { grid-template-columns: 1fr; }
+      .stat-grid { grid-template-columns: 1fr; }
+      .match-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <h1 class="hero-title" id="duo-title">arena duo roast</h1>
+        <p class="hero-sub" id="duo-sub">real stats, imaginary conclusions, arena edition</p>
+      </div>
+      <div class="hero-tag" id="api-tag"><span class="dot"></span><span id="api-status">demo mode</span></div>
+    </header>
+
+    <section class="panel" style="animation-delay: 0.05s;">
+      <div class="panel-head">
+        <h2>duo lookup</h2>
+        <div class="panel-note">shareable url, no accounts, just vibes</div>
+      </div>
+      <form id="duo-form" autocomplete="off">
+        <div class="field-grid">
+          <label class="field">
+            <span>region</span>
+            <select id="region">
+              <option value="na">na</option>
+              <option value="euw">euw</option>
+              <option value="eune">eune</option>
+              <option value="kr">kr</option>
+              <option value="br">br</option>
+              <option value="la1">lan</option>
+              <option value="la2">las</option>
+              <option value="oc1">oce</option>
+              <option value="tr">tr</option>
+              <option value="ru">ru</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>summoner</span>
+            <input id="summoner-a" placeholder="example: deanyo">
+          </label>
+          <label class="field">
+            <span>duo</span>
+            <input id="summoner-b" placeholder="example: cerri">
+          </label>
+          <label class="field">
+            <span>matches to scan</span>
+            <select id="match-count">
+              <option value="20">20 matches</option>
+              <option value="25" selected>25 matches</option>
+              <option value="30">30 matches</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>roast tone</span>
+            <select id="roast-tone">
+              <option value="classic" selected>classic banter</option>
+              <option value="gentle">gentle</option>
+              <option value="savage">savage</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>verdict style</span>
+            <select id="verdict-style">
+              <option value="auto" selected>auto verdict</option>
+              <option value="manual">manual only</option>
+            </select>
+          </label>
+        </div>
+        <div class="actions">
+          <button class="btn primary" type="submit" id="analyze-btn">analyze duo</button>
+          <button class="btn" type="button" id="sample-btn">load sample</button>
+          <button class="btn" type="button" id="share-btn">copy share url</button>
+          <button class="btn" type="reset" id="reset-btn">reset</button>
+        </div>
+      </form>
+      <div class="hint" id="url-hint">share link: /?me=deanyo&duo=cerri&region=euw</div>
+    </section>
+
+    <section class="panel" style="animation-delay: 0.1s;">
+      <div class="panel-head">
+        <h2>snapshot</h2>
+        <div class="panel-note">recent arena data for this duo</div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat">
+          <div class="stat-label">games together</div>
+          <div class="stat-value" id="stat-games">--</div>
+          <div class="stat-sub" id="stat-games-sub">last 25 arena games</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">win rate</div>
+          <div class="stat-value" id="stat-winrate">--</div>
+          <div class="stat-sub" id="stat-winrate-sub">wins / losses</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">first death</div>
+          <div class="stat-value" id="stat-first">--</div>
+          <div class="stat-sub" id="stat-first-sub">who hits grey screen first</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">unused ult deaths</div>
+          <div class="stat-value" id="stat-ult">--</div>
+          <div class="stat-sub" id="stat-ult-sub">ult held in pocket</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">comfort pick bias</div>
+          <div class="stat-value" id="stat-comfort">--</div>
+          <div class="stat-sub" id="stat-comfort-sub">attachment to main</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">blame split</div>
+          <div class="stat-value" id="stat-blame">--</div>
+          <div class="stat-sub" id="stat-blame-sub">me / duo / riot</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" style="animation-delay: 0.15s;">
+      <div class="panel-head">
+        <h2>blame engine</h2>
+        <div class="panel-note">the algorithm is unbiased, mostly</div>
+      </div>
+      <div class="blame-grid">
+        <div class="blame-card">
+          <div class="blame-label" id="blame-me-label">summoner</div>
+          <div class="blame-value" id="blame-me">--</div>
+          <div class="blame-bar"><span id="blame-me-bar"></span></div>
+          <div class="blame-note" id="blame-me-note">loading data</div>
+        </div>
+        <div class="blame-card">
+          <div class="blame-label" id="blame-duo-label">duo</div>
+          <div class="blame-value" id="blame-duo">--</div>
+          <div class="blame-bar"><span id="blame-duo-bar"></span></div>
+          <div class="blame-note" id="blame-duo-note">loading data</div>
+        </div>
+        <div class="blame-card">
+          <div class="blame-label">riot</div>
+          <div class="blame-value" id="blame-riot">--</div>
+          <div class="blame-bar"><span id="blame-riot-bar"></span></div>
+          <div class="blame-note" id="blame-riot-note">loading data</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" style="animation-delay: 0.2s;">
+      <div class="panel-head">
+        <h2>roast cards</h2>
+        <div class="panel-note">stats are real, conclusions are vibes</div>
+      </div>
+      <ul class="list" id="roast-list">
+        <li>
+          <div class="list-title">waiting on data</div>
+          <div class="list-body">run a duo lookup to generate roasts</div>
+        </li>
+      </ul>
+    </section>
+
+    <section class="panel" style="animation-delay: 0.25s;">
+      <div class="panel-head">
+        <h2>recent arena rounds</h2>
+        <div class="panel-note">last games played together</div>
+      </div>
+      <div class="match-table" id="match-table">
+        <div class="match-row">
+          <strong>loading</strong>
+          <span>result</span>
+          <span>champions</span>
+          <span>moment</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" style="animation-delay: 0.3s;">
+      <div class="panel-head">
+        <h2>verdict</h2>
+        <div class="panel-note">short summary of the duo vibe</div>
+      </div>
+      <div class="verdict" id="verdict">generate a verdict to roast responsibly.</div>
+    </section>
+
+    <footer class="footer">
+      <span class="badge" id="data-source">data source: demo</span>
+      <span>this site is for entertainment. stats are real. conclusions are banter.</span>
+      <a href="https://github.com/deanyo" target="_blank" rel="noopener">by dnyo</a>
+    </footer>
+  </main>
+
+  <script>
+    const API_BASE = "https://league-arena-duo.deanryanit.workers.dev";
+    const DEFAULTS = {
+      region: "euw",
+      me: "deanyo",
+      duo: "cerri",
+      matches: "25",
+      tone: "classic",
+      verdict: "auto"
+    };
+
+    const apiStatus = document.getElementById("api-status");
+    const apiTag = document.getElementById("api-tag");
+    const dataSource = document.getElementById("data-source");
+    const urlHint = document.getElementById("url-hint");
+    const duoTitle = document.getElementById("duo-title");
+    const duoSub = document.getElementById("duo-sub");
+    const form = document.getElementById("duo-form");
+    const sampleBtn = document.getElementById("sample-btn");
+    const shareBtn = document.getElementById("share-btn");
+
+    const statGames = document.getElementById("stat-games");
+    const statGamesSub = document.getElementById("stat-games-sub");
+    const statWinrate = document.getElementById("stat-winrate");
+    const statWinrateSub = document.getElementById("stat-winrate-sub");
+    const statFirst = document.getElementById("stat-first");
+    const statFirstSub = document.getElementById("stat-first-sub");
+    const statUlt = document.getElementById("stat-ult");
+    const statUltSub = document.getElementById("stat-ult-sub");
+    const statComfort = document.getElementById("stat-comfort");
+    const statComfortSub = document.getElementById("stat-comfort-sub");
+    const statBlame = document.getElementById("stat-blame");
+    const statBlameSub = document.getElementById("stat-blame-sub");
+
+    const blameMe = document.getElementById("blame-me");
+    const blameMeBar = document.getElementById("blame-me-bar");
+    const blameMeLabel = document.getElementById("blame-me-label");
+    const blameMeNote = document.getElementById("blame-me-note");
+    const blameDuo = document.getElementById("blame-duo");
+    const blameDuoBar = document.getElementById("blame-duo-bar");
+    const blameDuoLabel = document.getElementById("blame-duo-label");
+    const blameDuoNote = document.getElementById("blame-duo-note");
+    const blameRiot = document.getElementById("blame-riot");
+    const blameRiotBar = document.getElementById("blame-riot-bar");
+    const blameRiotNote = document.getElementById("blame-riot-note");
+
+    const roastList = document.getElementById("roast-list");
+    const matchTable = document.getElementById("match-table");
+    const verdict = document.getElementById("verdict");
+
+    const demoData = {
+      meta: {
+        source: "demo",
+        updatedAt: "just now",
+        matchCount: 25,
+        duo: { me: "deanyo", duo: "cerri", region: "euw" }
+      },
+      summary: {
+        games: 22,
+        wins: 13,
+        winRate: 0.59,
+        avgPlacement: 2.4,
+        firstDeaths: { me: 5, duo: 9 },
+        unusedUlts: { me: 2, duo: 6 },
+        comfortBias: "cerri",
+        comfortPick: "jinx",
+        duoIdentity: "all-in adventurers"
+      },
+      blame: {
+        me: { share: 0.34, reason: "tests limits early" },
+        duo: { share: 0.41, reason: "ult collector" },
+        riot: { share: 0.25, reason: "augment rng with opinions" }
+      },
+      roasts: [
+        { title: "first death trophy", body: "cerri is first down in 41% of rounds. the data suggests early enthusiasm." },
+        { title: "ult hoarder", body: "6 rounds ended with cerri still holding ultimate. historic preservation society." },
+        { title: "comfort lock", body: "jinx shows up in every other match. comfort pick or lifestyle choice." },
+        { title: "clutch moments", body: "deanyo secures the last takedown in 8 rounds. hero arc confirmed." }
+      ],
+      matches: [
+        { result: "win", placement: 1, champs: "yasuo + jinx", highlight: "double execute to close" },
+        { result: "loss", placement: 4, champs: "ahri + jinx", highlight: "could not out-run the dash parade" },
+        { result: "win", placement: 2, champs: "pantheon + jinx", highlight: "triple stun chain" },
+        { result: "loss", placement: 3, champs: "lucian + jinx", highlight: "ultimates saved for next game" },
+        { result: "win", placement: 1, champs: "vi + jinx", highlight: "level 2 all-in success" }
+      ],
+      verdict: "the duo looks like it is winning more than it loses, but only just. deanyo brings the confidence spike, cerri brings the comfort picks, and riot brings the chaos. small sample size, but the vibe says you are one good augment roll away from dominance."
+    };
+
+    function setStatus(text, tone) {
+      apiStatus.textContent = text;
+      apiTag.classList.remove("status-warn", "status-ok", "status-bad");
+      if (tone) apiTag.classList.add(tone);
+    }
+
+    function clearList(listEl) {
+      while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+    }
+
+    function formatPercent(value) {
+      return Math.round(value * 100) + "%";
+    }
+
+    function leaderLabel(meValue, duoValue, meName, duoName) {
+      if (meValue === duoValue) return "tied";
+      return meValue > duoValue ? meName : duoName;
+    }
+
+    function renderSummary(data) {
+      const summary = data.summary;
+      const meta = data.meta;
+      statGames.textContent = summary.games + " games";
+      statGamesSub.textContent = "last " + meta.matchCount + " arena games";
+      statWinrate.textContent = formatPercent(summary.winRate);
+      statWinrateSub.textContent = summary.wins + " wins / " + (summary.games - summary.wins) + " losses";
+      const firstLeader = leaderLabel(summary.firstDeaths.me, summary.firstDeaths.duo, meta.duo.me, meta.duo.duo);
+      statFirst.textContent = firstLeader;
+      statFirstSub.textContent = meta.duo.me + " " + summary.firstDeaths.me + " vs " + meta.duo.duo + " " + summary.firstDeaths.duo;
+      const ultLeader = leaderLabel(summary.unusedUlts.me, summary.unusedUlts.duo, meta.duo.me, meta.duo.duo);
+      statUlt.textContent = ultLeader;
+      statUltSub.textContent = meta.duo.me + " " + summary.unusedUlts.me + " vs " + meta.duo.duo + " " + summary.unusedUlts.duo;
+      statComfort.textContent = summary.comfortBias;
+      statComfortSub.textContent = "most played: " + summary.comfortPick;
+      const blame = data.blame;
+      statBlame.textContent = Math.round(blame.me.share * 100) + " / " + Math.round(blame.duo.share * 100) + " / " + Math.round(blame.riot.share * 100);
+      statBlameSub.textContent = "me / duo / riot";
+    }
+
+    function renderBlame(data) {
+      const blame = data.blame;
+      blameMeLabel.textContent = data.meta.duo.me;
+      blameDuoLabel.textContent = data.meta.duo.duo;
+
+      blameMe.textContent = formatPercent(blame.me.share);
+      blameMeBar.style.width = Math.round(blame.me.share * 100) + "%";
+      blameMeNote.textContent = blame.me.reason;
+
+      blameDuo.textContent = formatPercent(blame.duo.share);
+      blameDuoBar.style.width = Math.round(blame.duo.share * 100) + "%";
+      blameDuoNote.textContent = blame.duo.reason;
+
+      blameRiot.textContent = formatPercent(blame.riot.share);
+      blameRiotBar.style.width = Math.round(blame.riot.share * 100) + "%";
+      blameRiotNote.textContent = blame.riot.reason;
+    }
+
+    function renderRoasts(roasts) {
+      clearList(roastList);
+      roasts.forEach((roast) => {
+        const item = document.createElement("li");
+        const title = document.createElement("div");
+        title.className = "list-title";
+        title.textContent = roast.title;
+        const body = document.createElement("div");
+        body.className = "list-body";
+        body.textContent = roast.body;
+        item.append(title, body);
+        roastList.appendChild(item);
+      });
+    }
+
+    function renderMatches(matches) {
+      clearList(matchTable);
+      const head = document.createElement("div");
+      head.className = "match-row";
+      head.innerHTML = "<strong>result</strong><span>placement</span><span>champions</span><span>moment</span>";
+      matchTable.appendChild(head);
+      matches.forEach((match) => {
+        const row = document.createElement("div");
+        row.className = "match-row";
+        const result = document.createElement("div");
+        result.className = "chip " + (match.result === "win" ? "win" : "loss");
+        result.textContent = match.result;
+        const placement = document.createElement("span");
+        placement.textContent = "place " + match.placement;
+        const champs = document.createElement("span");
+        champs.textContent = match.champs;
+        const highlight = document.createElement("span");
+        highlight.textContent = match.highlight;
+        row.append(result, placement, champs, highlight);
+        matchTable.appendChild(row);
+      });
+    }
+
+    function renderVerdict(text) {
+      verdict.textContent = text || "no verdict yet";
+    }
+
+    function renderMeta(data) {
+      const source = data.meta.source || "api";
+      const statusText = source === "demo" ? "demo mode" : source === "cache" ? "cached data" : "live data";
+      setStatus(statusText, source === "demo" ? "status-warn" : "status-ok");
+      dataSource.textContent = "data source: " + source;
+      duoTitle.textContent = data.meta.duo.me + " + " + data.meta.duo.duo;
+      duoSub.textContent = "arena duo report for " + data.meta.duo.region.toUpperCase();
+    }
+
+    function renderAll(data) {
+      renderMeta(data);
+      renderSummary(data);
+      renderBlame(data);
+      renderRoasts(data.roasts || []);
+      renderMatches(data.matches || []);
+      renderVerdict(data.verdict || "");
+    }
+
+    function normalizeInput(value, fallback) {
+      const trimmed = (value || "").trim();
+      return trimmed ? trimmed : fallback;
+    }
+
+    function collectParams() {
+      return {
+        region: document.getElementById("region").value,
+        me: normalizeInput(document.getElementById("summoner-a").value, DEFAULTS.me),
+        duo: normalizeInput(document.getElementById("summoner-b").value, DEFAULTS.duo),
+        matches: document.getElementById("match-count").value,
+        tone: document.getElementById("roast-tone").value,
+        verdict: document.getElementById("verdict-style").value
+      };
+    }
+
+    function applyParams(params) {
+      document.getElementById("region").value = params.region;
+      document.getElementById("summoner-a").value = params.me;
+      document.getElementById("summoner-b").value = params.duo;
+      document.getElementById("match-count").value = params.matches;
+      document.getElementById("roast-tone").value = params.tone;
+      document.getElementById("verdict-style").value = params.verdict;
+    }
+
+    function paramsFromUrl() {
+      const url = new URL(window.location.href);
+      return {
+        region: url.searchParams.get("region") || DEFAULTS.region,
+        me: url.searchParams.get("me") || DEFAULTS.me,
+        duo: url.searchParams.get("duo") || DEFAULTS.duo,
+        matches: url.searchParams.get("matches") || DEFAULTS.matches,
+        tone: url.searchParams.get("tone") || DEFAULTS.tone,
+        verdict: url.searchParams.get("verdict") || DEFAULTS.verdict
+      };
+    }
+
+    function updateUrl(params) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("region", params.region);
+      url.searchParams.set("me", params.me);
+      url.searchParams.set("duo", params.duo);
+      url.searchParams.set("matches", params.matches);
+      url.searchParams.set("tone", params.tone);
+      url.searchParams.set("verdict", params.verdict);
+      history.replaceState(null, "", url.toString());
+      urlHint.textContent = "share link: " + url.pathname + url.search;
+      return url.toString();
+    }
+
+    async function fetchDuoData(params) {
+      if (!API_BASE) {
+        return {
+          ...demoData,
+          meta: {
+            ...demoData.meta,
+            duo: { me: params.me, duo: params.duo, region: params.region },
+            matchCount: Number(params.matches) || demoData.meta.matchCount
+          }
+        };
+      }
+      const url = new URL(API_BASE.replace(/\/$/, "") + "/duo");
+      url.searchParams.set("region", params.region);
+      url.searchParams.set("me", params.me);
+      url.searchParams.set("duo", params.duo);
+      url.searchParams.set("matches", params.matches);
+      url.searchParams.set("tone", params.tone);
+      url.searchParams.set("verdict", params.verdict);
+      const response = await fetch(url.toString(), {
+        headers: { "Accept": "application/json" }
+      });
+      if (!response.ok) {
+        throw new Error("api error");
+      }
+      return response.json();
+    }
+
+    async function runLookup(params) {
+      setStatus("loading duo stats", "status-ok");
+      dataSource.textContent = "data source: api";
+      try {
+        const data = await fetchDuoData(params);
+        renderAll(data);
+      } catch (error) {
+        setStatus("api error, showing demo", "status-warn");
+        renderAll(demoData);
+      }
+    }
+
+    function copyShareUrl() {
+      const params = collectParams();
+      const url = updateUrl(params);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+          setStatus("share url copied", "status-ok");
+        }).catch(() => {
+          setStatus("copy failed", "status-bad");
+        });
+      } else {
+        setStatus("copy not supported", "status-bad");
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const params = collectParams();
+      updateUrl(params);
+      await runLookup(params);
+    });
+
+    form.addEventListener("reset", () => {
+      const params = { ...DEFAULTS };
+      applyParams(params);
+      updateUrl(params);
+      renderAll({
+        ...demoData,
+        meta: {
+          ...demoData.meta,
+          duo: { me: params.me, duo: params.duo, region: params.region },
+          matchCount: Number(params.matches)
+        }
+      });
+      setStatus("defaults loaded", "status-ok");
+    });
+
+    sampleBtn.addEventListener("click", () => {
+      const params = { ...DEFAULTS };
+      applyParams(params);
+      updateUrl(params);
+      renderAll({
+        ...demoData,
+        meta: {
+          ...demoData.meta,
+          duo: { me: params.me, duo: params.duo, region: params.region },
+          matchCount: Number(params.matches)
+        }
+      });
+      setStatus("demo mode", "status-warn");
+    });
+
+    shareBtn.addEventListener("click", copyShareUrl);
+
+    const initialParams = paramsFromUrl();
+    applyParams(initialParams);
+    updateUrl(initialParams);
+    runLookup(initialParams);
+  </script>
+</body>
+</html>
