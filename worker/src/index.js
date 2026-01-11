@@ -748,25 +748,32 @@ function buildMetaRoast(metaStats, names, tone) {
   const highMeta = 0.65;
   const highS = 0.45;
   const offMeta = 0.55;
+  const gapCallout = 0.14;
 
   const copy = {
     gentle: {
       metaLead: (leader, rate) => `${leader} leans on S/A tiers in ${formatPercent(rate)} of games. safe picks, soft landing.`,
       sLead: (leader, rate) => `${leader} is in S-tier ${formatPercent(rate)} of the time. comfort is a strategy.`,
       offBoth: (rate) => `both skip S/A tiers in ${formatPercent(rate)} of games. creative duo energy.`,
-      offLead: (leader, rate) => `${leader} skips S/A tiers in ${formatPercent(rate)} of games. off-meta pride.`
+      offLead: (leader, rate) => `${leader} skips S/A tiers in ${formatPercent(rate)} of games. off-meta pride.`,
+      metaGap: (leader, rate, otherRate) => `${leader} leans meta at ${formatPercent(rate)} vs ${formatPercent(otherRate)}. tier list tilt detected.`,
+      metaMix: (rate) => `S/A usage sits around ${formatPercent(rate)}. balanced picks, balanced risks.`
     },
     classic: {
       metaLead: (leader, rate) => `${leader} locks S/A tiers in ${formatPercent(rate)} of games. meta loyalty program member.`,
       sLead: (leader, rate) => `${leader} is on S-tier ${formatPercent(rate)} of the time. tier list scout reporting in.`,
       offBoth: (rate) => `both skip S/A tiers in ${formatPercent(rate)} of games. off-meta respect.`,
-      offLead: (leader, rate) => `${leader} skips S/A tiers in ${formatPercent(rate)} of games. off-meta pride.`
+      offLead: (leader, rate) => `${leader} skips S/A tiers in ${formatPercent(rate)} of games. off-meta pride.`,
+      metaGap: (leader, rate, otherRate) => `${leader} leans meta at ${formatPercent(rate)} vs ${formatPercent(otherRate)}. tier list habits showing.`,
+      metaMix: (rate) => `S/A usage hovers around ${formatPercent(rate)}. balanced draft energy.`
     },
     savage: {
       metaLead: (leader, rate) => `${leader} locks S/A tiers in ${formatPercent(rate)} of games. tier list disciple behavior.`,
       sLead: (leader, rate) => `${leader} is on S-tier ${formatPercent(rate)} of the time. only the finest labels.`,
       offBoth: (rate) => `both skip S/A tiers in ${formatPercent(rate)} of games. off-meta chaos enjoyers.`,
-      offLead: (leader, rate) => `${leader} skips S/A tiers in ${formatPercent(rate)} of games. off-meta gremlin energy.`
+      offLead: (leader, rate) => `${leader} skips S/A tiers in ${formatPercent(rate)} of games. off-meta gremlin energy.`,
+      metaGap: (leader, rate, otherRate) => `${leader} leans meta at ${formatPercent(rate)} vs ${formatPercent(otherRate)}. tier list dependency flagged.`,
+      metaMix: (rate) => `S/A usage sits at ${formatPercent(rate)}. balanced picks, unbalanced results.`
     }
   };
 
@@ -790,7 +797,16 @@ function buildMetaRoast(metaStats, names, tone) {
     return { title: "off-meta props", body: toneCopy.offLead(offLeader.name, offLeader.data.offMetaRate) };
   }
 
-  return null;
+  const metaGap = Math.abs(me.metaRate - duo.metaRate);
+  if (metaGap >= gapCallout) {
+    const metaLeader = me.metaRate >= duo.metaRate ? names.me : names.duo;
+    const leaderRate = Math.max(me.metaRate, duo.metaRate);
+    const otherRate = Math.min(me.metaRate, duo.metaRate);
+    return { title: "tier list habits", body: toneCopy.metaGap(metaLeader, leaderRate, otherRate) };
+  }
+
+  const avgMeta = (me.metaRate + duo.metaRate) / 2;
+  return { title: "tier list habits", body: toneCopy.metaMix(avgMeta) };
 }
 
 function isArenaMatch(info) {
