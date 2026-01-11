@@ -694,13 +694,14 @@ function normalizeAiMoments(moments, fallback, matches) {
     if (lower.includes("top 4")) return "top4";
     if (lower.includes("bottom 4")) return "bottom4";
     if (lower.includes("first place") || lower.includes("top spot") || lower.includes("win")) return "first";
+    if (lower.includes("ran deep") || lower.includes("late-round") || lower.includes("late run")) return "ran-deep";
     if (lower.includes("surviv") || lower.includes("bracket")) return "survive";
     if (lower.includes("made") || lower.includes("through") || lower.includes("cut")) return "made";
     if (lower.includes("alive") || lower.includes("kept") || lower.includes("late")) return "alive";
     if (lower.includes("early") || lower.includes("exit") || lower.includes("drop") || lower.includes("out")) return "early";
     if (lower.includes("collapse") || lower.includes("crumbled") || lower.includes("clipped") || lower.includes("short")) return "collapse";
     if (lower.includes("frontline")) return "frontline";
-    if (lower.includes("out-traded")) return "outtrade";
+    if (lower.includes("out-traded") || lower.includes("hands diff") || lower.includes("carry")) return "outplay";
     if (lower.includes("anvil")) return "anvil";
     return lower.replace(/[^a-z0-9\s]/g, " ").trim().split(/\s+/).slice(0, 2).join(" ");
   };
@@ -894,8 +895,8 @@ async function generateAiVerdict(summary, names, tone, insights, env) {
     "Never mention first deaths, first blood, or 'first death' language.",
     "Never mention ultimates, ults, or cooldowns.",
     "Never mention crowns; say top-4 wins or first place instead.",
-    "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition.",
-    "Avoid 'inting', 'feeding', slurs, or direct insults.",
+    "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition, inting, feeding.",
+    "No slurs or hateful language. Keep it playful, not personal."
     "Use deaths only if facts.deaths is present.",
     "Tank share indicates damage taken; support share indicates healing + shielding.",
     "2-4 sentences, banter not toxic, no profanity or slurs.",
@@ -938,9 +939,11 @@ async function getAiVerdict(summary, names, tone, insights, env, ctx, url) {
   }
 
   const ttl = safeNumber(env.AI_VERDICT_TTL_SECONDS, 86400);
+  const version = env.AI_VERDICT_VERSION || "v1";
   const fingerprint = buildVerdictFingerprint(summary, insights, tone);
   const cache = caches.default;
   const cacheUrl = new URL(url.origin + "/verdict/ai");
+  cacheUrl.searchParams.set("v", version);
   cacheUrl.searchParams.set("key", fingerprint);
   cacheUrl.searchParams.set("tone", tone);
   cacheUrl.searchParams.set("me", normalizeName(names.me, "").toLowerCase());
@@ -1087,8 +1090,8 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
     "Never mention first deaths, first blood, or 'first death' language.",
     "Never mention ultimates, ults, or cooldowns.",
     "Never mention crowns; say top-4 wins or first place instead.",
-    "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition.",
-    "Avoid 'inting', 'feeding', slurs, or direct insults.",
+    "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition, inting, feeding.",
+    "No slurs or hateful language. Keep it playful, not personal."
     "Use deaths only if facts.deaths is present.",
     "Only mention combat share stats if facts.availability.combatShares is true.",
     "Tank share signals frontline work; support share is healing + shielding. Don't frame tank share as bad unless impact is low.",
@@ -1170,8 +1173,8 @@ async function generateAiMoments(summary, names, tone, matches, env) {
     "Never mention first deaths, first blood, or 'first death' language.",
     "Never mention ultimates, ults, or cooldowns.",
     "Never mention crowns; say top-4 wins or first place instead.",
-    "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition.",
-    "Avoid 'inting', 'feeding', slurs, or direct insults.",
+    "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition, inting, feeding.",
+    "No slurs or hateful language. Keep it playful, not personal."
     "Use the provided hint and placement to keep meaning consistent.",
     "Avoid 'ticket' phrases like 'ticket punched'.",
     "If you mention champions, include both. Prefer the exact pairLabel string.",
@@ -1609,6 +1612,8 @@ function buildHighlight(me, duo, placement, seed) {
   if (deaths >= kills + 8) {
     add("scrapped hard, fell short");
     add("snowballed on");
+    add("feeding streak");
+    add("inting angle");
     add("gap opened up");
   }
   if (damage >= damageTaken * 1.3 && damage >= 18000) {
