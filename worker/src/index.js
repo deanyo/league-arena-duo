@@ -609,12 +609,31 @@ function normalizeAiRoasts(roasts, fallback) {
   return selected.slice(0, 4);
 }
 
-function normalizeAiMoments(moments, fallback, matches) {
+function normalizeAiMoments(moments, fallback, matches, names) {
   if (!Array.isArray(moments) || !Array.isArray(fallback)) return fallback;
   const target = fallback.length;
   if (target === 0) return fallback;
   const cleaned = moments.map((moment) => collapseWhitespace(moment)).filter(Boolean);
   if (cleaned.length === 0) return fallback;
+  const players = [
+    { name: names?.me || "", key: normalizeToken(names?.me || "") },
+    { name: names?.duo || "", key: normalizeToken(names?.duo || "") }
+  ].filter((player) => player.key);
+  const hasPlayers = players.length > 0;
+  const mentionsPlayer = (text) => {
+    if (!hasPlayers) return false;
+    const tokens = String(text || "").split(/\s+/);
+    for (const rawToken of tokens) {
+      const base = rawToken.replace(/['’]s$/i, "");
+      const norm = normalizeToken(base);
+      if (!norm) continue;
+      for (const player of players) {
+        if (norm === player.key) return true;
+        if (norm.length >= 6 && editDistance(norm, player.key) <= 1) return true;
+      }
+    }
+    return false;
+  };
   const used = new Set();
   const usedKeys = new Set();
   const result = [];
@@ -768,6 +787,10 @@ function normalizeAiMoments(moments, fallback, matches) {
     const lower = candidate.toLowerCase();
     if (bannedPhrases.some((phrase) => lower.includes(phrase))) {
       pushMoment(pickFromPool(match, i + 3), match);
+      continue;
+    }
+    if (mentionsPlayer(candidate)) {
+      pushMoment(pickFromPool(match, i + 19), match);
       continue;
     }
     if (match && pairLabel) {
@@ -1595,7 +1618,7 @@ async function getAiBundle(summary, names, tone, insights, matches, fallbackRoas
         names
       );
       const moments = normalizeMomentNames(
-        normalizeAiMoments(cachedData.moments, fallbackMoments, matches || []),
+        normalizeAiMoments(cachedData.moments, fallbackMoments, matches || [], names),
         names
       );
       const sources = cachedData.sources || {};
@@ -1622,7 +1645,7 @@ async function getAiBundle(summary, names, tone, insights, matches, fallbackRoas
       names
     );
     const moments = normalizeMomentNames(
-      normalizeAiMoments(rawBundle.moments, fallbackMoments, matches || []),
+      normalizeAiMoments(rawBundle.moments, fallbackMoments, matches || [], names),
       names
     );
     const verdictSource = verdictText ? "ai" : "ai-fallback";
@@ -1725,7 +1748,12 @@ async function getAiMoments(summary, names, tone, insights, matches, env, ctx, u
   if (cached) {
     const cachedData = await cached.json();
     if (cachedData && Array.isArray(cachedData.moments)) {
-      const normalized = normalizeAiMoments(cachedData.moments, matches.map((match) => match.highlight), matches);
+      const normalized = normalizeAiMoments(
+        cachedData.moments,
+        matches.map((match) => match.highlight),
+        matches,
+        names
+      );
       return { moments: normalizeMomentNames(normalized, names), source: "ai-cache" };
     }
   }
@@ -1733,7 +1761,7 @@ async function getAiMoments(summary, names, tone, insights, matches, env, ctx, u
   try {
     const rawMoments = await generateAiMoments(summary, names, tone, matches, env);
     const fallback = matches.map((match) => match.highlight);
-    const moments = normalizeMomentNames(normalizeAiMoments(rawMoments, fallback, matches), names);
+    const moments = normalizeMomentNames(normalizeAiMoments(rawMoments, fallback, matches, names), names);
     const source = moments === fallback ? "ai-fallback" : "ai";
     if (source === "ai") {
       const cacheResponse = new Response(JSON.stringify({ moments }), {
