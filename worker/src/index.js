@@ -1642,7 +1642,12 @@ function buildBlame(summary, names, insights) {
 
   const meBreakdown = [
     { label: "execution", value: `deaths ${deathsMe} (${deathShare(deathsMe)})` },
-    { label: "impact", value: hasCombatStats ? `damage share ${formatShare(shares.damage?.me)}` : "no combat data" },
+    {
+      label: "impact",
+      value: hasCombatStats
+        ? `damage ${formatNumber(insights?.damage?.me || 0)} (${formatShare(shares.damage?.me)})`
+        : "no combat data"
+    },
     { label: "healing", value: supportLine("healing", insights?.healing?.me, shares.healing?.me) },
     { label: "shielding", value: supportLine("shielding", insights?.shielding?.me, shares.shielding?.me) },
     { label: "economy", value: economyLine(items?.lowRate?.me, anvil?.meRate) },
@@ -1650,7 +1655,12 @@ function buildBlame(summary, names, insights) {
   ];
   const duoBreakdown = [
     { label: "execution", value: `deaths ${deathsDuo} (${deathShare(deathsDuo)})` },
-    { label: "impact", value: hasCombatStats ? `damage share ${formatShare(shares.damage?.duo)}` : "no combat data" },
+    {
+      label: "impact",
+      value: hasCombatStats
+        ? `damage ${formatNumber(insights?.damage?.duo || 0)} (${formatShare(shares.damage?.duo)})`
+        : "no combat data"
+    },
     { label: "healing", value: supportLine("healing", insights?.healing?.duo, shares.healing?.duo) },
     { label: "shielding", value: supportLine("shielding", insights?.shielding?.duo, shares.shielding?.duo) },
     { label: "economy", value: economyLine(items?.lowRate?.duo, anvil?.duoRate) },

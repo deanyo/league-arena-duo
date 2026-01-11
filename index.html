@@ -751,13 +751,15 @@
       insights: {
         streaks: { top4: 4, bottom4: 2 },
         deaths: { me: 19, duo: 21 },
+        damage: { me: 112345, duo: 131890, total: 244235 },
+        damageTaken: { me: 158900, duo: 132400, total: 291300 },
         healing: { me: 5200, duo: 4800, total: 10000 },
         shielding: { me: 1800, duo: 2200, total: 4000 },
         support: { me: 7000, duo: 7000, total: 14000 },
         shares: {
           deaths: { me: 0.48, duo: 0.52 },
           damage: { me: 0.46, duo: 0.54 },
-          tank: { me: 0.58, duo: 0.42 },
+          tank: { me: 0.55, duo: 0.45 },
           healing: { me: 0.52, duo: 0.48 },
           shielding: { me: 0.45, duo: 0.55 },
           support: { me: 0.5, duo: 0.5 }
@@ -1121,12 +1123,52 @@
       } else {
         statFirstSub.textContent = "no combat data";
       }
-      const damageSummary = shareSummary(shares.damage, meta.duo);
-      statDamage.innerHTML = highlightNames(damageSummary.leader, meta.duo);
-      statDamageSub.innerHTML = highlightNames(damageSummary.detail, meta.duo);
-      const tankSummary = shareSummary(shares.tank, meta.duo);
-      statTank.innerHTML = highlightNames(tankSummary.leader, meta.duo);
-      statTankSub.innerHTML = highlightNames(tankSummary.detail, meta.duo);
+      const damageTotal = Number(insights.damage?.total || 0);
+      if (damageTotal > 0) {
+        const damageSummary = shareSummary(shares.damage, meta.duo);
+        statDamage.innerHTML = highlightNames(damageSummary.leader, meta.duo);
+        statDamageSub.innerHTML = highlightNames(
+          meta.duo.me +
+            " " +
+            formatNumber(insights.damage?.me || 0) +
+            " (" +
+            formatPercent(shares.damage?.me || 0) +
+            ") vs " +
+            meta.duo.duo +
+            " " +
+            formatNumber(insights.damage?.duo || 0) +
+            " (" +
+            formatPercent(shares.damage?.duo || 0) +
+            ")",
+          meta.duo
+        );
+      } else {
+        statDamage.textContent = "none";
+        statDamageSub.textContent = "no damage logged";
+      }
+      const tankTotal = Number(insights.damageTaken?.total || 0);
+      if (tankTotal > 0) {
+        const tankSummary = shareSummary(shares.tank, meta.duo);
+        statTank.innerHTML = highlightNames(tankSummary.leader, meta.duo);
+        statTankSub.innerHTML = highlightNames(
+          meta.duo.me +
+            " " +
+            formatNumber(insights.damageTaken?.me || 0) +
+            " (" +
+            formatPercent(shares.tank?.me || 0) +
+            ") vs " +
+            meta.duo.duo +
+            " " +
+            formatNumber(insights.damageTaken?.duo || 0) +
+            " (" +
+            formatPercent(shares.tank?.duo || 0) +
+            ")",
+          meta.duo
+        );
+      } else {
+        statTank.textContent = "none";
+        statTankSub.textContent = "no damage taken logged";
+      }
       const healingTotal = Number(insights.healing?.total || 0);
       if (healingTotal > 0) {
         const healingSummary = shareSummary(shares.healing, meta.duo);
@@ -1192,6 +1234,10 @@
       } else {
         const meRate = metaStats.me?.metaRate || 0;
         const duoRate = metaStats.duo?.metaRate || 0;
+        const meTotal = metaStats.me?.total || summary.games || 0;
+        const duoTotal = metaStats.duo?.total || summary.games || 0;
+        const meMetaCount = Math.round(meRate * meTotal);
+        const duoMetaCount = Math.round(duoRate * duoTotal);
         const metaLeader = Math.abs(meRate - duoRate) <= 0.06
           ? "balanced"
           : meRate > duoRate
@@ -1199,7 +1245,22 @@
             : meta.duo.duo;
         statMeta.innerHTML = highlightNames(metaLeader, meta.duo);
         statMetaSub.innerHTML = highlightNames(
-          meta.duo.me + " " + formatPercent(meRate) + " / " + meta.duo.duo + " " + formatPercent(duoRate) + " meta",
+          meta.duo.me +
+            " " +
+            meMetaCount +
+            "/" +
+            meTotal +
+            " (" +
+            formatPercent(meRate) +
+            ") vs " +
+            meta.duo.duo +
+            " " +
+            duoMetaCount +
+            "/" +
+            duoTotal +
+            " (" +
+            formatPercent(duoRate) +
+            ") meta",
           meta.duo
         );
       }
