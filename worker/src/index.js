@@ -571,6 +571,7 @@ function normalizeAiMoments(moments, fallback, matches) {
   if (cleaned.length < target) return fallback;
   const used = new Set();
   const result = [];
+  const bannedPhrases = ["ticket", "ult", "ultimate", "ultimates", "cooldown"];
   for (let i = 0; i < target; i += 1) {
     const candidate = cleaned[i];
     if (!candidate || used.has(candidate.toLowerCase())) {
@@ -578,17 +579,28 @@ function normalizeAiMoments(moments, fallback, matches) {
       continue;
     }
     const match = Array.isArray(matches) ? matches[i] : null;
-    const pairLabel = match?.champsTagged
-      ? match.champsTagged.join(" + ")
-      : match?.champs || "";
+    const pairLabel = match?.champs
+      ? String(match.champs || "").trim()
+      : Array.isArray(match?.champsTagged)
+        ? match.champsTagged.map(stripTierSuffix).join(" + ")
+        : "";
+    const lower = candidate.toLowerCase();
+    if (bannedPhrases.some((phrase) => lower.includes(phrase))) {
+      result.push(fallback[i]);
+      continue;
+    }
     if (match && pairLabel) {
-      const tokens = (match.champsTagged || String(match.champs || "").split(" + "))
-        .map((name) => String(name || "").replace(/\s*\[[A-Z]\]\s*$/i, "").trim())
+      const tokens = String(pairLabel)
+        .split(" + ")
+        .map(stripTierSuffix)
         .filter(Boolean);
-      const lower = candidate.toLowerCase();
-      const mentionsAny = tokens.some((token) => token && lower.includes(token.toLowerCase()));
+      const mentionsCount = tokens.filter((token) => token && lower.includes(token.toLowerCase())).length;
+      if (mentionsCount === 1 && tokens.length > 1) {
+        result.push(fallback[i]);
+        continue;
+      }
       const hasPair = lower.includes(pairLabel.toLowerCase());
-      if (mentionsAny && !hasPair) {
+      if (mentionsCount > 0 && !hasPair && (lower.includes(" with ") || lower.includes(" for "))) {
         result.push(fallback[i]);
         continue;
       }
@@ -632,6 +644,10 @@ function parseJsonLenient(raw) {
 
 function collapseWhitespace(text) {
   return String(text || "").replace(/\s+/g, " ").trim();
+}
+
+function stripTierSuffix(name) {
+  return String(name || "").replace(/\s*\[[A-Z]\]\s*$/i, "").trim();
 }
 
 async function generateAiVerdict(summary, names, tone, insights, env) {
@@ -700,6 +716,7 @@ async function generateAiVerdict(summary, names, tone, insights, env) {
     "Use the provided facts only; do not invent numbers, events, or qualitative claims.",
     "Do not imply stats that are not explicitly provided.",
     "Never mention first deaths, first blood, or 'first death' language.",
+    "Never mention ultimates, ults, or cooldowns.",
     "Never mention crowns; say wins or first place instead.",
     "Use deaths only if facts.deaths is present.",
     "Tank share indicates damage taken; support share indicates healing + shielding.",
@@ -890,6 +907,7 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
     "Use only the provided facts and numbers; do not invent or infer extra stats.",
     "Do not use comparative claims unless the exact percentage is provided.",
     "Never mention first deaths, first blood, or 'first death' language.",
+    "Never mention ultimates, ults, or cooldowns.",
     "Never mention crowns; say wins or first place instead.",
     "Use deaths only if facts.deaths is present.",
     "Only mention combat share stats if facts.availability.combatShares is true.",
@@ -939,9 +957,14 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
 async function generateAiMoments(summary, names, tone, matches, env) {
   const model = env.OPENAI_MODEL || "gpt-4o-mini";
   const items = (matches || []).map((match, index) => {
-      const champs = Array.isArray(match.champsTagged)
-        ? match.champsTagged
-        : String(match.champs || "").split(" + ").map((name) => name.trim()).filter(Boolean);
+    const rawChamps = String(match.champs || "")
+      .split(" + ")
+      .map(stripTierSuffix)
+      .filter(Boolean);
+    const taggedChamps = Array.isArray(match.champsTagged)
+      ? match.champsTagged.map(stripTierSuffix).filter(Boolean)
+      : [];
+    const champs = rawChamps.length ? rawChamps : taggedChamps;
     return {
       index,
       placement: match.placement || 0,
@@ -964,12 +987,14 @@ async function generateAiMoments(summary, names, tone, matches, env) {
     "Return one moment per match, in the same order.",
     "Each moment is 2-8 words, lowercase, no profanity, no slurs.",
     "Never mention first deaths, first blood, or 'first death' language.",
+    "Never mention ultimates, ults, or cooldowns.",
     "Never mention crowns; say wins or first place instead.",
     "Use the provided hint and placement to keep meaning consistent.",
-    "If you mention champions, use the exact pairLabel string.",
+    "Avoid 'ticket' phrases like 'ticket punched'.",
+    "If you mention champions, include both. Prefer the exact pairLabel string.",
     "Never assign a champion to a specific player or use 'with X' for a single champ.",
     "Prefer including a champion pair when it's interesting.",
-    "Avoid repeating the same phrase across the list."
+    "Avoid repeating the same phrase or verb across the list."
   ].join(" ");
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -1360,7 +1385,6 @@ function buildHighlight(me, duo, placement, seed) {
   const healing = (me.totalHeal || 0) + (duo.totalHeal || 0);
   const shielding = (me.totalDamageShieldedOnTeammates || 0) + (duo.totalDamageShieldedOnTeammates || 0);
   const support = healing + shielding;
-  const ultCasts = (me.spell4Casts || 0) + (duo.spell4Casts || 0);
   const meItems = countItems(me);
   const duoItems = countItems(duo);
   const lowItems = meItems <= 2 || duoItems <= 2;
@@ -1373,16 +1397,21 @@ function buildHighlight(me, duo, placement, seed) {
 
   if (placement === 1) {
     add("top spot secured");
-    add("first place sealed");
-    add("top spot locked");
+    add("first place locked");
+    add("top spot claimed");
+    add("win secured");
   } else if (placement > 0 && placement <= 4) {
     add("top 4 secured");
-    add("ticket punched for top 4");
+    add("made the cut");
     add("survived the bracket");
+    add("top 4 locked");
+    add("kept the run alive");
   } else if (placement >= 5) {
     add("bottom 4 exit");
-    add("early exit ticket");
+    add("early exit");
+    add("short run");
     add("lobby ended the run");
+    add("bracket collapsed");
   }
 
   if (kills >= deaths + 8) add("out-traded the lobby");
@@ -1392,8 +1421,6 @@ function buildHighlight(me, duo, placement, seed) {
   if (assists >= kills + 8) add("setup for days");
   if (kills >= assists + 8) add("finisher instincts");
   if (support >= 9000) add("sustain clinic");
-  if (ultCasts === 0) add("ultimates on vacation");
-  if (ultCasts >= 12) add("ults on cooldown");
   if (placement <= 4 && deaths > kills) add("survived the chaos");
   if (placement >= 5 && kills > deaths) add("could not close the trades");
   if (lowItems && placement >= 5) add("build never came online");
