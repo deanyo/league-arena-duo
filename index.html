@@ -771,6 +771,64 @@
       });
     }
 
+    function renderErrorState(message, params) {
+      const safeMessage = message ? String(message) : "api error";
+      const names = {
+        me: params && params.me ? params.me : DEFAULTS.me,
+        duo: params && params.duo ? params.duo : DEFAULTS.duo
+      };
+      const region = params && params.region ? params.region : DEFAULTS.region;
+
+      setStatus("api error", "status-bad");
+      dataSource.textContent = "data source: error";
+      duoTitle.innerHTML = formatDuoTitle(names);
+      duoSub.textContent = "arena duo report for " + region.toUpperCase();
+
+      statGames.textContent = "--";
+      statGamesSub.textContent = "no data";
+      statWinrate.textContent = "--";
+      statWinrateSub.textContent = "check api key";
+      statFirst.textContent = "--";
+      statFirstSub.textContent = "no data";
+      statUlt.textContent = "--";
+      statUltSub.textContent = "no data";
+      statComfort.textContent = "--";
+      statComfortSub.textContent = "no data";
+      statBlame.textContent = "--";
+      statBlameSub.textContent = "me / duo / riot";
+
+      blameMeLabel.textContent = names.me;
+      blameDuoLabel.textContent = names.duo;
+      blameMe.textContent = "--";
+      blameMeBar.style.width = "0%";
+      blameMeNote.textContent = "api error";
+      blameDuo.textContent = "--";
+      blameDuoBar.style.width = "0%";
+      blameDuoNote.textContent = "api error";
+      blameRiot.textContent = "--";
+      blameRiotBar.style.width = "0%";
+      blameRiotNote.textContent = "api error";
+
+      clearList(roastList);
+      const roastItem = document.createElement("li");
+      const roastTitle = document.createElement("div");
+      roastTitle.className = "list-title";
+      roastTitle.textContent = "api error";
+      const roastBody = document.createElement("div");
+      roastBody.className = "list-body";
+      roastBody.textContent = safeMessage;
+      roastItem.append(roastTitle, roastBody);
+      roastList.appendChild(roastItem);
+
+      clearList(matchTable);
+      const row = document.createElement("div");
+      row.className = "match-row";
+      row.innerHTML = "<strong>error</strong><span>--</span><span>--</span><span>check api key</span>";
+      matchTable.appendChild(row);
+
+      verdict.textContent = safeMessage;
+    }
+
     function renderVerdict(text, names) {
       const safeText = text || "no verdict yet";
       verdict.innerHTML = highlightNames(safeText, names);
@@ -846,14 +904,7 @@
 
     async function fetchDuoData(params) {
       if (!API_BASE) {
-        return {
-          ...demoData,
-          meta: {
-            ...demoData.meta,
-            duo: { me: params.me, duo: params.duo, region: params.region },
-            matchCount: Number(params.matches) || demoData.meta.matchCount
-          }
-        };
+        throw new Error("API not configured");
       }
       const url = new URL(API_BASE.replace(/\/$/, "") + "/duo");
       url.searchParams.set("region", params.region);
@@ -878,8 +929,7 @@
         const data = await fetchDuoData(params);
         renderAll(data);
       } catch (error) {
-        setStatus("api error, showing demo", "status-warn");
-        renderAll(demoData);
+        renderErrorState(error.message || "api error", params);
       }
     }
 
@@ -908,15 +958,7 @@
       const params = { ...DEFAULTS };
       applyParams(params);
       updateUrl(params);
-      renderAll({
-        ...demoData,
-        meta: {
-          ...demoData.meta,
-          duo: { me: params.me, duo: params.duo, region: params.region },
-          matchCount: Number(params.matches)
-        }
-      });
-      setStatus("defaults loaded", "status-ok");
+      runLookup(params);
     });
 
     sampleBtn.addEventListener("click", () => {
