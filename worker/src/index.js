@@ -575,29 +575,42 @@ function normalizeAiMoments(moments, fallback, matches) {
   const bannedPhrases = ["ticket", "ult", "ultimate", "ultimates", "cooldown"];
   const pools = {
     first: [
+      "{pair} closed it out",
+      "{pair} took first",
+      "{pair} locked the win",
+      "{pair} grabbed top spot",
+      "{pair} sealed the win",
       "top spot secured",
       "first place locked",
       "win secured",
       "top spot claimed",
       "first place confirmed",
-      "top spot held",
       "first place clinched",
-      "win stamped",
-      "top spot sealed"
+      "win stamped"
     ],
     top4: [
-      "top 4 secured",
+      "{pair} ran deep",
+      "{pair} made it through",
+      "{pair} stayed alive",
+      "{pair} scraped through",
+      "{pair} survived the bracket",
       "made the cut",
-      "top 4 locked",
       "survived the bracket",
       "kept the run alive",
-      "top 4 confirmed",
       "made it through",
-      "top 4 saved",
-      "bracket survived"
+      "ran deep",
+      "stayed alive",
+      "late-round presence",
+      "bracket survived",
+      "top 4 secured",
+      "top 4 locked"
     ],
     bottom4: [
-      "bottom 4 exit",
+      "{pair} bowed out early",
+      "{pair} dropped early",
+      "{pair} fell out early",
+      "{pair} cut short",
+      "{pair} out before late rounds",
       "early exit",
       "short run",
       "lobby ended the run",
@@ -605,19 +618,17 @@ function normalizeAiMoments(moments, fallback, matches) {
       "early drop",
       "run cut short",
       "quick exit",
-      "closed out early"
+      "closed out early",
+      "early knockout",
+      "fast exit"
     ],
     neutral: ["even trades, messy finish", "scrapped hard, fell short", "out-traded the lobby"]
   };
-  const pickFromPool = (resultType, seed) => {
-    const pool = pools[resultType] || pools.neutral;
-    if (!pool.length) return "";
-    const start = Math.abs(seed || 0) % pool.length;
-    for (let i = 0; i < pool.length; i += 1) {
-      const candidate = pool[(start + i) % pool.length];
-      if (!used.has(candidate)) return candidate;
-    }
-    return pool[start];
+  const formatTemplate = (template, pairLabel) => {
+    if (!template) return "";
+    if (!template.includes("{pair}")) return template;
+    if (!pairLabel) return template.replace("{pair} ", "").replace("{pair}", "").trim();
+    return template.replace("{pair}", pairLabel);
   };
   const momentKey = (text) => {
     const lower = String(text || "").toLowerCase();
@@ -626,10 +637,41 @@ function normalizeAiMoments(moments, fallback, matches) {
     if (lower.includes("first place") || lower.includes("top spot") || lower.includes("win")) return "first";
     return lower.replace(/[^a-z0-9\s]/g, " ").trim().split(/\s+/).slice(0, 2).join(" ");
   };
+  const pushMoment = (text, match) => {
+    const pairLabel = match?.champs
+      ? String(match.champs || "").trim()
+      : Array.isArray(match?.champsTagged)
+        ? match.champsTagged.map(stripTierSuffix).join(" + ")
+        : "";
+    const finalText = formatTemplate(text, pairLabel);
+    if (!finalText) return false;
+    result.push(finalText);
+    used.add(finalText.toLowerCase());
+    const key = momentKey(finalText);
+    if (key) usedKeys.add(key);
+    return true;
+  };
+  const pickFromPool = (match, seed) => {
+    const resultType = match?.result || "neutral";
+    const pool = pools[resultType] || pools.neutral;
+    if (!pool.length) return "";
+    const start = Math.abs(seed || 0) % pool.length;
+    for (let i = 0; i < pool.length; i += 1) {
+      const candidate = pool[(start + i) % pool.length];
+      const pairLabel = match?.champs
+        ? String(match.champs || "").trim()
+        : Array.isArray(match?.champsTagged)
+          ? match.champsTagged.map(stripTierSuffix).join(" + ")
+          : "";
+      const formatted = formatTemplate(candidate, pairLabel);
+      if (formatted && !used.has(formatted.toLowerCase())) return formatted;
+    }
+    return formatTemplate(pool[start], match?.champs || "");
+  };
   for (let i = 0; i < target; i += 1) {
     const candidate = cleaned[i];
     if (!candidate || used.has(candidate.toLowerCase())) {
-      result.push(pickFromPool(matches?.[i]?.result || "neutral", i));
+      pushMoment(pickFromPool(matches?.[i], i), matches?.[i]);
       continue;
     }
     const match = Array.isArray(matches) ? matches[i] : null;
@@ -640,7 +682,7 @@ function normalizeAiMoments(moments, fallback, matches) {
         : "";
     const lower = candidate.toLowerCase();
     if (bannedPhrases.some((phrase) => lower.includes(phrase))) {
-      result.push(pickFromPool(match?.result || "neutral", i + 3));
+      pushMoment(pickFromPool(match, i + 3), match);
       continue;
     }
     if (match && pairLabel) {
@@ -650,23 +692,21 @@ function normalizeAiMoments(moments, fallback, matches) {
         .filter(Boolean);
       const mentionsCount = tokens.filter((token) => token && lower.includes(token.toLowerCase())).length;
       if (mentionsCount === 1 && tokens.length > 1) {
-        result.push(pickFromPool(match?.result || "neutral", i + 7));
+        pushMoment(pickFromPool(match, i + 7), match);
         continue;
       }
       const hasPair = lower.includes(pairLabel.toLowerCase());
       if (mentionsCount > 0 && !hasPair && (lower.includes(" with ") || lower.includes(" for "))) {
-        result.push(pickFromPool(match?.result || "neutral", i + 11));
+        pushMoment(pickFromPool(match, i + 11), match);
         continue;
       }
     }
     const key = momentKey(candidate);
     if (key && usedKeys.has(key)) {
-      result.push(pickFromPool(match?.result || "neutral", i + 13));
+      pushMoment(pickFromPool(match, i + 13), match);
       continue;
     }
-    used.add(candidate.toLowerCase());
-    if (key) usedKeys.add(key);
-    result.push(candidate);
+    pushMoment(candidate, match);
   }
   return result;
 }
