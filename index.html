@@ -1067,7 +1067,7 @@
       return meValue > duoValue ? meName : duoName;
     }
 
-    function shareSummary(shares, names, tieMargin = 0.06) {
+    function shareSummary(shares, names, tieMargin = 0.0001) {
       const meShare = typeof shares?.me === "number" ? shares.me : 0;
       const duoShare = typeof shares?.duo === "number" ? shares.duo : 0;
       if (meShare <= 0 && duoShare <= 0) {
