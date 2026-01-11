@@ -648,7 +648,8 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
         { role: "user", content: `Stats JSON:\n${JSON.stringify(promptPayload, null, 2)}` }
       ],
       temperature: 0.9,
-      max_tokens: 220
+      max_tokens: 220,
+      response_format: { type: "json_object" }
     })
   });
 
@@ -658,11 +659,16 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
   }
   const data = await response.json();
   const raw = data.choices?.[0]?.message?.content || "";
-  const jsonText = extractJsonBlock(raw);
-  if (!jsonText) {
-    throw new Error("openai invalid json");
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    const jsonText = extractJsonBlock(raw);
+    if (!jsonText) {
+      throw new Error("openai invalid json");
+    }
+    parsed = JSON.parse(jsonText);
   }
-  const parsed = JSON.parse(jsonText);
   if (!parsed || !Array.isArray(parsed.roasts)) {
     throw new Error("openai invalid roasts");
   }
