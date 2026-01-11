@@ -570,12 +570,66 @@ function normalizeAiMoments(moments, fallback, matches) {
   const cleaned = moments.map((moment) => collapseWhitespace(moment)).filter(Boolean);
   if (cleaned.length < target) return fallback;
   const used = new Set();
+  const usedKeys = new Set();
   const result = [];
   const bannedPhrases = ["ticket", "ult", "ultimate", "ultimates", "cooldown"];
+  const pools = {
+    first: [
+      "top spot secured",
+      "first place locked",
+      "win secured",
+      "top spot claimed",
+      "first place confirmed",
+      "top spot held",
+      "first place clinched",
+      "win stamped",
+      "top spot sealed"
+    ],
+    top4: [
+      "top 4 secured",
+      "made the cut",
+      "top 4 locked",
+      "survived the bracket",
+      "kept the run alive",
+      "top 4 confirmed",
+      "made it through",
+      "top 4 saved",
+      "bracket survived"
+    ],
+    bottom4: [
+      "bottom 4 exit",
+      "early exit",
+      "short run",
+      "lobby ended the run",
+      "bracket collapsed",
+      "early drop",
+      "run cut short",
+      "quick exit",
+      "closed out early"
+    ],
+    neutral: ["even trades, messy finish", "scrapped hard, fell short", "out-traded the lobby"]
+  };
+  const pickFromPool = (resultType, seed) => {
+    const pool = pools[resultType] || pools.neutral;
+    if (!pool.length) return "";
+    const start = Math.abs(seed || 0) % pool.length;
+    for (let i = 0; i < pool.length; i += 1) {
+      const candidate = pool[(start + i) % pool.length];
+      if (!used.has(candidate)) return candidate;
+    }
+    return pool[start];
+  };
+  const momentKey = (text) => {
+    const lower = String(text || "").toLowerCase();
+    if (lower.includes("top 4")) return "top4";
+    if (lower.includes("bottom 4")) return "bottom4";
+    if (lower.includes("first place") || lower.includes("top spot") || lower.includes("win")) return "first";
+    return lower.replace(/[^a-z0-9\s]/g, " ").trim().split(/\s+/).slice(0, 2).join(" ");
+  };
   for (let i = 0; i < target; i += 1) {
     const candidate = cleaned[i];
     if (!candidate || used.has(candidate.toLowerCase())) {
-      result.push(fallback[i]);
+      result.push(pickFromPool(matches?.[i]?.result || "neutral", i));
       continue;
     }
     const match = Array.isArray(matches) ? matches[i] : null;
@@ -586,7 +640,7 @@ function normalizeAiMoments(moments, fallback, matches) {
         : "";
     const lower = candidate.toLowerCase();
     if (bannedPhrases.some((phrase) => lower.includes(phrase))) {
-      result.push(fallback[i]);
+      result.push(pickFromPool(match?.result || "neutral", i + 3));
       continue;
     }
     if (match && pairLabel) {
@@ -596,16 +650,22 @@ function normalizeAiMoments(moments, fallback, matches) {
         .filter(Boolean);
       const mentionsCount = tokens.filter((token) => token && lower.includes(token.toLowerCase())).length;
       if (mentionsCount === 1 && tokens.length > 1) {
-        result.push(fallback[i]);
+        result.push(pickFromPool(match?.result || "neutral", i + 7));
         continue;
       }
       const hasPair = lower.includes(pairLabel.toLowerCase());
       if (mentionsCount > 0 && !hasPair && (lower.includes(" with ") || lower.includes(" for "))) {
-        result.push(fallback[i]);
+        result.push(pickFromPool(match?.result || "neutral", i + 11));
         continue;
       }
     }
+    const key = momentKey(candidate);
+    if (key && usedKeys.has(key)) {
+      result.push(pickFromPool(match?.result || "neutral", i + 13));
+      continue;
+    }
     used.add(candidate.toLowerCase());
+    if (key) usedKeys.add(key);
     result.push(candidate);
   }
   return result;
@@ -994,7 +1054,7 @@ async function generateAiMoments(summary, names, tone, matches, env) {
     "If you mention champions, include both. Prefer the exact pairLabel string.",
     "Never assign a champion to a specific player or use 'with X' for a single champ.",
     "Prefer including a champion pair when it's interesting.",
-    "Avoid repeating the same phrase or verb across the list."
+    "Avoid repeating the same phrase, verb, or result wording across the list."
   ].join(" ");
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
