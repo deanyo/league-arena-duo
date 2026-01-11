@@ -211,11 +211,43 @@ function hashString(value) {
   return Math.abs(hash);
 }
 
+const ANVIL_CHAMPION_KEYS = new Set([
+  "twistedfate",
+  "ornn",
+  "pyke",
+  "gangplank"
+]);
+
 function formatFirsts(count) {
   const safe = Number.isFinite(count) ? count : 0;
   if (safe === 0) return "no first-place finishes yet";
   if (safe === 1) return "1 first-place finish";
   return `${safe} first-place finishes`;
+}
+
+function countItems(participant) {
+  let count = 0;
+  for (let slot = 0; slot <= 5; slot += 1) {
+    const id = participant[`item${slot}`] || 0;
+    if (id > 0) count += 1;
+  }
+  return count;
+}
+
+function isAnvilChampion(name) {
+  const key = normalizeChampionKey(name);
+  return ANVIL_CHAMPION_KEYS.has(key);
+}
+
+function pickTopAnvilChampion(counts) {
+  let top = { name: "", count: 0 };
+  Object.entries(counts || {}).forEach(([name, count]) => {
+    if (!isAnvilChampion(name)) return;
+    if (count > top.count) {
+      top = { name, count };
+    }
+  });
+  return top;
 }
 
 function smallSamplePrefix(games) {
@@ -271,7 +303,9 @@ function buildFallbackInsights(summary, matches) {
       assists: 0
     },
     diversity: { me: 0, duo: 0, combined: 0 },
-    meta: null
+    meta: null,
+    items: { meAvg: 0, duoAvg: 0, lowRate: { me: 0, duo: 0 } },
+    anvil: { meRate: 0, duoRate: 0, meTop: "", duoTop: "" }
   };
 }
 
@@ -342,7 +376,13 @@ function buildRoastFingerprint(summary, insights, tone) {
     insights?.deaths?.total || 0,
     insights?.diversity?.combined || 0,
     placements,
-    metaKey
+    metaKey,
+    insights?.items?.meAvg || 0,
+    insights?.items?.duoAvg || 0,
+    insights?.items?.lowRate?.me || 0,
+    insights?.items?.lowRate?.duo || 0,
+    insights?.anvil?.meRate || 0,
+    insights?.anvil?.duoRate || 0
   ].join("|");
 }
 
@@ -365,6 +405,15 @@ function buildInsights(stats, summary, metaStats) {
     ...Object.keys(stats.champions.me || {}),
     ...Object.keys(stats.champions.duo || {})
   ]).size;
+
+  const itemsMeAvg = games > 0 ? stats.items.me / games : 0;
+  const itemsDuoAvg = games > 0 ? stats.items.duo / games : 0;
+  const lowItemMeRate = games > 0 ? stats.lowItems.me / games : 0;
+  const lowItemDuoRate = games > 0 ? stats.lowItems.duo / games : 0;
+  const anvilMeRate = games > 0 ? stats.anvilChamps.me / games : 0;
+  const anvilDuoRate = games > 0 ? stats.anvilChamps.duo / games : 0;
+  const anvilMeTop = pickTopAnvilChampion(stats.champions.me);
+  const anvilDuoTop = pickTopAnvilChampion(stats.champions.duo);
 
   const perGame = (value) => (games > 0 ? Math.round(value / games) : 0);
 
@@ -393,7 +442,18 @@ function buildInsights(stats, summary, metaStats) {
       assists: perGame(assistsTotal)
     },
     diversity: { me: uniqueMe, duo: uniqueDuo, combined: combinedUnique },
-    meta: metaStats
+    meta: metaStats,
+    items: {
+      meAvg: Math.round(itemsMeAvg * 10) / 10,
+      duoAvg: Math.round(itemsDuoAvg * 10) / 10,
+      lowRate: { me: lowItemMeRate, duo: lowItemDuoRate }
+    },
+    anvil: {
+      meRate: anvilMeRate,
+      duoRate: anvilDuoRate,
+      meTop: formatChampion(anvilMeTop.name || ""),
+      duoTop: formatChampion(anvilDuoTop.name || "")
+    }
   };
 }
 
@@ -558,7 +618,9 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
     placements: insights?.placements,
     shares: insights?.shares,
     diversity: insights?.diversity,
-    meta: insights?.meta
+    meta: insights?.meta,
+    items: insights?.items,
+    anvil: insights?.anvil
   };
 
   const system = [
@@ -887,6 +949,10 @@ function buildHighlight(me, duo, placement, seed) {
   const damageTaken = (me.totalDamageTaken || 0) + (duo.totalDamageTaken || 0);
   const healing = (me.totalHeal || 0) + (duo.totalHeal || 0);
   const ultCasts = (me.spell4Casts || 0) + (duo.spell4Casts || 0);
+  const meItems = countItems(me);
+  const duoItems = countItems(duo);
+  const lowItems = meItems <= 2 || duoItems <= 2;
+  const anvilChamp = isAnvilChampion(me.championName) || isAnvilChampion(duo.championName);
   const candidates = [];
   const add = (text) => {
     if (!text || candidates.includes(text)) return;
@@ -918,6 +984,8 @@ function buildHighlight(me, duo, placement, seed) {
   if (ultCasts >= 12) add("ults on cooldown");
   if (placement <= 4 && deaths > kills) add("survived the chaos");
   if (placement >= 5 && kills > deaths) add("could not close the trades");
+  if (lowItems && placement >= 5) add("build never came online");
+  if (anvilChamp && placement >= 6) add("anvil run stalled");
 
   if (candidates.length === 0) {
     if (kills >= deaths + 6) return "out-traded the lobby";
@@ -949,6 +1017,10 @@ function toneCopy(tone) {
       champPoolSmall: (count) => `only ${count} champions in rotation. comfort zone cozy.`,
       champPoolWide: (count) => `${count} champions across the scan. variety pack energy.`,
       crownCount: (firsts) => `${firsts} first-place finishes in the trophy case.`,
+      lowItems: (leader, rate) => `${leader} ends ${formatPercent(rate)} of games with 3 or fewer items. the build never shows up.`,
+      anvilLead: (leader, rate, champ) => `${leader} runs the anvil economy in ${formatPercent(rate)} of games${champ ? ` on ${champ}` : ""}.`,
+      anvilFail: (leader, champ) => `${leader} tried the anvil economy${champ ? ` on ${champ}` : ""} and still went bottom 4. financial advice revoked.`,
+      anvilDouble: (rate) => `both lean into anvils in ${formatPercent(rate)} of games. double gamba, double stress.`,
       clutch: (summary) => {
         const firsts = formatFirsts(summary.firsts);
         const prefix = smallSamplePrefix(summary.games);
@@ -974,6 +1046,10 @@ function toneCopy(tone) {
       champPoolSmall: (count) => `only ${count} champions in rotation. comfort zone locked.`,
       champPoolWide: (count) => `${count} champs across the scan. variety pack duo.`,
       crownCount: (firsts) => `${firsts} first-place finishes on the shelf. crown collection growing.`,
+      lowItems: (leader, rate) => `${leader} ends ${formatPercent(rate)} of games with 3 or fewer items. the build never showed.`,
+      anvilLead: (leader, rate, champ) => `${leader} runs the anvil economy in ${formatPercent(rate)} of games${champ ? ` on ${champ}` : ""}.`,
+      anvilFail: (leader, champ) => `${leader} tried the anvil economy${champ ? ` on ${champ}` : ""} and still hit bottom 4. finance diff.`,
+      anvilDouble: (rate) => `both lean into anvils in ${formatPercent(rate)} of games. double gamba, double stress.`,
       clutch: (summary) => {
         const firsts = formatFirsts(summary.firsts);
         const prefix = smallSamplePrefix(summary.games);
@@ -999,6 +1075,10 @@ function toneCopy(tone) {
       champPoolSmall: (count) => `only ${count} champions in rotation. comfort cage secured.`,
       champPoolWide: (count) => `${count} champions across the scan. chaos buffet.`,
       crownCount: (firsts) => `${firsts} first-place finishes in the cabinet. still room for more.`,
+      lowItems: (leader, rate) => `${leader} ends ${formatPercent(rate)} of games with 3 or fewer items. inventory poverty arc.`,
+      anvilLead: (leader, rate, champ) => `${leader} runs the anvil economy in ${formatPercent(rate)} of games${champ ? ` on ${champ}` : ""}.`,
+      anvilFail: (leader, champ) => `${leader} tried the anvil economy${champ ? ` on ${champ}` : ""} and still went bottom 4. budget nerfed.`,
+      anvilDouble: (rate) => `both lean into anvils in ${formatPercent(rate)} of games. double gamba, double grief.`,
       clutch: (summary) => {
         const firsts = formatFirsts(summary.firsts);
         const prefix = smallSamplePrefix(summary.games);
@@ -1118,6 +1198,35 @@ function buildRoasts(summary, names, tone, metaStats, insights) {
     addUnique(pool, { title: "champion pool", body: copy.champPoolSmall(diversity) });
   } else if (diversity >= 10) {
     addUnique(pool, { title: "champion pool", body: copy.champPoolWide(diversity) });
+  }
+
+  const items = insights?.items;
+  if (items) {
+    const lowLeader = items.lowRate.me >= items.lowRate.duo
+      ? { name: names.me, rate: items.lowRate.me }
+      : { name: names.duo, rate: items.lowRate.duo };
+    if (lowLeader.rate >= 0.4) {
+      addUnique(pool, { title: "empty inventory", body: copy.lowItems(lowLeader.name, lowLeader.rate) });
+    }
+  }
+
+  const anvil = insights?.anvil;
+  if (anvil) {
+    const bothAnvil = anvil.meRate >= 0.3 && anvil.duoRate >= 0.3;
+    if (bothAnvil) {
+      addUnique(pool, { title: "double anvil", body: copy.anvilDouble((anvil.meRate + anvil.duoRate) / 2) });
+    } else {
+      const leader = anvil.meRate >= anvil.duoRate
+        ? { name: names.me, rate: anvil.meRate, champ: anvil.meTop }
+        : { name: names.duo, rate: anvil.duoRate, champ: anvil.duoTop };
+      if (leader.rate >= 0.3) {
+        if (summary.winRate < 0.5 || summary.avgPlacement >= 4.6) {
+          addUnique(pool, { title: "anvil economics", body: copy.anvilFail(leader.name, leader.champ) });
+        } else {
+          addUnique(pool, { title: "anvil economics", body: copy.anvilLead(leader.name, leader.rate, leader.champ) });
+        }
+      }
+    }
   }
 
   if (summary.firsts >= 2) {
@@ -1350,7 +1459,10 @@ async function handleDuo(req, env, ctx) {
     gold: { me: 0, duo: 0 },
     placements: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0 },
     top4Streak: 0,
-    bottom4Streak: 0
+    bottom4Streak: 0,
+    items: { me: 0, duo: 0 },
+    lowItems: { me: 0, duo: 0 },
+    anvilChamps: { me: 0, duo: 0 }
   };
   let currentTop4Streak = 0;
   let currentBottom4Streak = 0;
@@ -1422,6 +1534,14 @@ async function handleDuo(req, env, ctx) {
     stats.healing.duo += duoParticipant.totalHeal || 0;
     stats.gold.me += meParticipant.goldEarned || 0;
     stats.gold.duo += duoParticipant.goldEarned || 0;
+    const meItemCount = countItems(meParticipant);
+    const duoItemCount = countItems(duoParticipant);
+    stats.items.me += meItemCount;
+    stats.items.duo += duoItemCount;
+    if (meItemCount <= 3) stats.lowItems.me += 1;
+    if (duoItemCount <= 3) stats.lowItems.duo += 1;
+    if (isAnvilChampion(meParticipant.championName)) stats.anvilChamps.me += 1;
+    if (isAnvilChampion(duoParticipant.championName)) stats.anvilChamps.duo += 1;
 
     const meChamp = meParticipant.championName || "unknown";
     const duoChamp = duoParticipant.championName || "unknown";
