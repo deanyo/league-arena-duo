@@ -614,7 +614,7 @@ function normalizeAiMoments(moments, fallback, matches) {
   const target = fallback.length;
   if (target === 0) return fallback;
   const cleaned = moments.map((moment) => collapseWhitespace(moment)).filter(Boolean);
-  if (cleaned.length < target) return fallback;
+  if (cleaned.length === 0) return fallback;
   const used = new Set();
   const usedKeys = new Set();
   const result = [];
