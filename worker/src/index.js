@@ -444,6 +444,14 @@ function buildRoastFingerprint(summary, insights, tone) {
   ].join("|");
 }
 
+function buildMomentsFingerprint(summary, matches, tone) {
+  const avgPlacement = Number.isFinite(summary.avgPlacement) ? summary.avgPlacement.toFixed(2) : "0.00";
+  const matchKey = (matches || [])
+    .map((match) => `${match.placement || 0}:${match.champs || ""}`)
+    .join("|");
+  return [tone, summary.games || 0, summary.wins || 0, summary.firsts || 0, avgPlacement, matchKey].join("|");
+}
+
 function buildInsights(stats, summary, metaStats) {
   const games = summary.games || 0;
   const sum = (pair) => (pair?.me || 0) + (pair?.duo || 0);
@@ -553,6 +561,26 @@ function normalizeAiRoasts(roasts, fallback) {
   });
   if (cleaned.length < 3) return fallback;
   return cleaned.slice(0, 4);
+}
+
+function normalizeAiMoments(moments, fallback) {
+  if (!Array.isArray(moments) || !Array.isArray(fallback)) return fallback;
+  const target = fallback.length;
+  if (target === 0) return fallback;
+  const cleaned = moments.map((moment) => collapseWhitespace(moment)).filter(Boolean);
+  if (cleaned.length < target) return fallback;
+  const used = new Set();
+  const result = [];
+  for (let i = 0; i < target; i += 1) {
+    const candidate = cleaned[i];
+    if (!candidate || used.has(candidate.toLowerCase())) {
+      result.push(fallback[i]);
+      continue;
+    }
+    used.add(candidate.toLowerCase());
+    result.push(candidate);
+  }
+  return result;
 }
 
 function seededRandom(seed) {
@@ -890,6 +918,70 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
   return parsed.roasts;
 }
 
+async function generateAiMoments(summary, names, tone, matches, env) {
+  const model = env.OPENAI_MODEL || "gpt-4o-mini";
+  const items = (matches || []).map((match, index) => {
+    const champs = String(match.champs || "").split(" + ").map((name) => name.trim()).filter(Boolean);
+    return {
+      index,
+      placement: match.placement || 0,
+      result: match.resultLabel || match.result || "",
+      champions: champs,
+      hint: match.highlight || ""
+    };
+  });
+  const payload = {
+    tone,
+    arenaContext: "2v2v2v2v2v2v2v2, 8 teams, top 4 is a win, 1st is the crown",
+    players: [names.me, names.duo],
+    matches: items
+  };
+
+  const system = [
+    "You write short 'moment' blurbs for each Arena match.",
+    "Output JSON only with schema: {\"moments\":[\"...\"]}.",
+    "Return one moment per match, in the same order.",
+    "Each moment is 2-8 words, lowercase, no profanity, no slurs.",
+    "Never mention first deaths, first blood, or 'first death' language.",
+    "Use the provided hint and placement to keep meaning consistent.",
+    "Avoid repeating the same phrase across the list."
+  ].join(" ");
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: `Matches JSON:\n${JSON.stringify(payload, null, 2)}` }
+      ],
+      temperature: 0.9,
+      max_tokens: 240
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`openai error: ${response.status} ${text}`);
+  }
+  const data = await response.json();
+  const raw = data.choices?.[0]?.message?.content || "";
+  let parsed;
+  try {
+    parsed = parseJsonLenient(raw);
+  } catch (error) {
+    throw new Error(error.message || "openai invalid json");
+  }
+  if (!parsed || !Array.isArray(parsed.moments)) {
+    throw new Error("openai invalid moments");
+  }
+  return parsed.moments;
+}
+
 async function getAiRoasts(summary, names, tone, insights, fallback, env, ctx, url, options = {}) {
   if (!env.OPENAI_API_KEY) {
     return { roasts: fallback, source: "ai-fallback", error: options.debug ? "missing OPENAI_API_KEY" : undefined };
@@ -933,6 +1025,58 @@ async function getAiRoasts(summary, names, tone, insights, fallback, env, ctx, u
     return { roasts, source, error: options.debug ? null : undefined };
   } catch (error) {
     return { roasts: fallback, source: "ai-fallback", error: options.debug ? (error.message || "ai roasts error") : undefined };
+  }
+}
+
+async function getAiMoments(summary, names, tone, insights, matches, env, ctx, url, options = {}) {
+  if (!env.OPENAI_API_KEY) {
+    return { moments: matches.map((match) => match.highlight), source: "ai-fallback", error: options.debug ? "missing OPENAI_API_KEY" : undefined };
+  }
+  if (!insights || !Array.isArray(matches) || matches.length === 0) {
+    return { moments: matches.map((match) => match.highlight), source: "ai-fallback", error: options.debug ? "missing data" : undefined };
+  }
+
+  const ttl = safeNumber(env.AI_MOMENTS_TTL_SECONDS, 86400);
+  const version = env.AI_MOMENTS_VERSION || "v1";
+  const fingerprint = buildMomentsFingerprint(summary, matches, tone);
+  const cache = caches.default;
+  const cacheUrl = new URL(url.origin + "/moments/ai");
+  cacheUrl.searchParams.set("v", version);
+  cacheUrl.searchParams.set("key", fingerprint);
+  cacheUrl.searchParams.set("tone", tone);
+  cacheUrl.searchParams.set("me", normalizeName(names.me, "").toLowerCase());
+  cacheUrl.searchParams.set("duo", normalizeName(names.duo, "").toLowerCase());
+  const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
+  const cached = await cache.match(cacheKey);
+  if (cached) {
+    const cachedData = await cached.json();
+    if (cachedData && Array.isArray(cachedData.moments)) {
+      const normalized = normalizeAiMoments(cachedData.moments, matches.map((match) => match.highlight));
+      return { moments: normalized, source: "ai-cache" };
+    }
+  }
+
+  try {
+    const rawMoments = await generateAiMoments(summary, names, tone, matches, env);
+    const fallback = matches.map((match) => match.highlight);
+    const moments = normalizeAiMoments(rawMoments, fallback);
+    const source = moments === fallback ? "ai-fallback" : "ai";
+    if (source === "ai") {
+      const cacheResponse = new Response(JSON.stringify({ moments }), {
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": `public, max-age=${ttl}`
+        }
+      });
+      ctx.waitUntil(cache.put(cacheKey, cacheResponse.clone()));
+    }
+    return { moments, source, error: options.debug ? null : undefined };
+  } catch (error) {
+    return {
+      moments: matches.map((match) => match.highlight),
+      source: "ai-fallback",
+      error: options.debug ? (error.message || "ai moments error") : undefined
+    };
   }
 }
 
@@ -1801,27 +1945,36 @@ async function handleDuo(req, env, ctx) {
       ...data,
       roasts: roastsAuto,
       verdict: canonicalVerdict,
-      meta: { ...data.meta, verdictSource: "auto", roastsSource: "auto" }
+      meta: { ...data.meta, verdictSource: "auto", roastsSource: "auto", momentsSource: "auto" }
     };
     ctx.waitUntil(cache.put(cacheKey, jsonResponse(canonical, 200, headers)));
 
     if (verdictStyle === "fresh") {
       data.meta.verdictSource = "fresh";
       data.meta.roastsSource = "auto";
+      data.meta.momentsSource = "auto";
       data.roasts = roastsAuto;
       data.verdict = buildVerdict(data.summary, data.meta.duo, tone, { fresh: true });
       return jsonResponse(data, 200, { "Cache-Control": "no-store" });
     }
 
     if (verdictStyle === "ai") {
-      const [aiVerdict, aiRoasts] = await Promise.all([
+      const [aiVerdict, aiRoasts, aiMoments] = await Promise.all([
         getAiVerdict(data.summary, data.meta.duo, tone, data.insights, env, ctx, url),
-        getAiRoasts(data.summary, data.meta.duo, tone, data.insights, roastsAuto, env, ctx, url)
+        getAiRoasts(data.summary, data.meta.duo, tone, data.insights, roastsAuto, env, ctx, url),
+        getAiMoments(data.summary, data.meta.duo, tone, data.insights, data.matches || [], env, ctx, url)
       ]);
       data.meta.verdictSource = aiVerdict.source;
       data.meta.roastsSource = aiRoasts.source;
+      data.meta.momentsSource = aiMoments.source;
       data.verdict = aiVerdict.verdict;
       data.roasts = aiRoasts.roasts;
+      if (Array.isArray(data.matches) && Array.isArray(aiMoments.moments)) {
+        data.matches = data.matches.map((match, index) => ({
+          ...match,
+          highlight: aiMoments.moments[index] || match.highlight
+        }));
+      }
       return jsonResponse(data, 200, { "Cache-Control": "no-store" });
     }
 
@@ -1968,15 +2121,25 @@ async function handleDuo(req, env, ctx) {
   let verdict = buildVerdict(summary, names, tone, { fresh: verdictStyle === "fresh" });
   let roastsSource = "auto";
   let roasts = roastsAuto;
+  let momentsSource = "auto";
+  let matchesFinal = matchesOut;
   if (verdictStyle === "ai") {
-    const [aiVerdict, aiRoasts] = await Promise.all([
+    const [aiVerdict, aiRoasts, aiMoments] = await Promise.all([
       getAiVerdict(summary, names, tone, insights, env, ctx, url),
-      getAiRoasts(summary, names, tone, insights, roastsAuto, env, ctx, url)
+      getAiRoasts(summary, names, tone, insights, roastsAuto, env, ctx, url),
+      getAiMoments(summary, names, tone, insights, matchesOut, env, ctx, url)
     ]);
     verdictSource = aiVerdict.source;
     verdict = aiVerdict.verdict;
     roastsSource = aiRoasts.source;
     roasts = aiRoasts.roasts;
+    momentsSource = aiMoments.source;
+    if (Array.isArray(matchesOut) && Array.isArray(aiMoments.moments)) {
+      matchesFinal = matchesOut.map((match, index) => ({
+        ...match,
+        highlight: aiMoments.moments[index] || match.highlight
+      }));
+    }
   }
 
   const payload = {
@@ -1986,13 +2149,14 @@ async function handleDuo(req, env, ctx) {
       matchCount: matches,
       duo: { me: names.me, duo: names.duo, region },
       verdictSource,
-      roastsSource
+      roastsSource,
+      momentsSource
     },
     summary,
     blame,
     insights,
     roasts,
-    matches: matchesOut,
+    matches: matchesFinal,
     verdict
   };
 
@@ -2001,7 +2165,7 @@ async function handleDuo(req, env, ctx) {
       ...payload,
       verdict: buildVerdict(summary, names, tone, { fresh: false }),
       roasts: roastsAuto,
-      meta: { ...payload.meta, verdictSource: "auto", roastsSource: "auto" }
+      meta: { ...payload.meta, verdictSource: "auto", roastsSource: "auto", momentsSource: "auto" }
     };
     ctx.waitUntil(cache.put(cacheKey, jsonResponse(cachePayload, 200, headers)));
     return jsonResponse(payload, 200, { "Cache-Control": "no-store" });
@@ -2074,10 +2238,26 @@ async function handleDebug(req, env, ctx) {
         url,
         { debug: true }
       );
+      const aiMoments = await getAiMoments(
+        duoData.summary,
+        duoData.meta.duo,
+        tone,
+        insights,
+        duoData.matches || [],
+        env,
+        ctx,
+        url,
+        { debug: true }
+      );
       payload.aiRoasts = {
         source: aiRoasts.source,
         error: aiRoasts.error || null,
         sample: aiRoasts.roasts
+      };
+      payload.aiMoments = {
+        source: aiMoments.source,
+        error: aiMoments.error || null,
+        sample: aiMoments.moments ? aiMoments.moments.slice(0, 3) : []
       };
     } catch (error) {
       payload.aiRoasts = {

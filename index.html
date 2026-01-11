@@ -1470,6 +1470,7 @@
       const source = data.meta.source || "api";
       const verdictMode = data.meta.verdictSource || normalizeVerdictStyle(document.getElementById("verdict-style").value);
       const roastsMode = data.meta.roastsSource || "auto";
+      const momentsMode = data.meta.momentsSource || "auto";
       const verdictLabel = verdictMode === "fresh"
         ? "fresh verdict"
         : verdictMode === "ai" || verdictMode === "ai-cache"
@@ -1482,9 +1483,15 @@
         : roastsMode === "ai-fallback"
           ? "fallback roasts"
           : "";
+      const momentsLabel = momentsMode === "ai" || momentsMode === "ai-cache"
+        ? "ai moments"
+        : momentsMode === "ai-fallback"
+          ? "fallback moments"
+          : "";
       const labels = [];
       if (verdictLabel) labels.push(verdictLabel);
       if (roastsLabel) labels.push(roastsLabel);
+      if (momentsLabel) labels.push(momentsLabel);
 
       let statusText = source === "demo" ? "demo mode" : source === "cache" ? "cached stats" : "live data";
       if (labels.length) {
