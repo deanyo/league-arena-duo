@@ -798,7 +798,13 @@
         row.className = "match-row";
         const result = document.createElement("div");
         const placementValue = match.placement || 0;
-        const resultType = match.result || (placementValue === 1 ? "first" : placementValue <= 4 ? "top4" : "bottom4");
+        const resultType = placementValue === 1
+          ? "first"
+          : placementValue > 1 && placementValue <= 4
+            ? "top4"
+            : placementValue >= 5
+              ? "bottom4"
+              : match.result || "bottom4";
         const labelMap = {
           first: "1st",
           top4: "top 4",

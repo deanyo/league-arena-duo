@@ -673,6 +673,16 @@ async function getAiRoasts(summary, names, tone, insights, fallback, env, ctx, u
   if (!env.OPENAI_API_KEY) {
     return { roasts: fallback, source: "ai-fallback" };
   }
+  if (!insights) {
+    return { roasts: fallback, source: "ai-fallback" };
+  }
+  const noCombatStats = (insights.damage?.total || 0) === 0
+    && (insights.kills?.total || 0) === 0
+    && (insights.assists?.total || 0) === 0
+    && (insights.deaths?.total || 0) === 0;
+  if (noCombatStats) {
+    return { roasts: fallback, source: "ai-fallback" };
+  }
 
   const ttl = safeNumber(env.AI_ROASTS_TTL_SECONDS, 86400);
   const fingerprint = buildRoastFingerprint(summary, insights, tone);
@@ -1387,6 +1397,8 @@ async function handleDuo(req, env, ctx) {
 
   const cache = caches.default;
   const cacheKeyUrl = new URL(url.origin + "/duo");
+  const cacheVersion = env.CACHE_VERSION || "v1";
+  cacheKeyUrl.searchParams.set("v", cacheVersion);
   cacheKeyUrl.searchParams.set("region", region);
   cacheKeyUrl.searchParams.set("me", meInput.toLowerCase());
   cacheKeyUrl.searchParams.set("duo", duoInput.toLowerCase());
