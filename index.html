@@ -452,9 +452,9 @@
           <div class="stat-sub" id="stat-games-sub">last 25 arena games</div>
         </div>
         <div class="stat">
-          <div class="stat-label">win rate</div>
+          <div class="stat-label">top 4 rate</div>
           <div class="stat-value" id="stat-winrate">--</div>
-          <div class="stat-sub" id="stat-winrate-sub">wins / losses</div>
+          <div class="stat-sub" id="stat-winrate-sub">top 4 / bottom 4</div>
         </div>
         <div class="stat">
           <div class="stat-label">first death</div>
@@ -727,7 +727,7 @@
       statGames.textContent = summary.games + " games";
       statGamesSub.textContent = "last " + meta.matchCount + " arena games";
       statWinrate.textContent = formatPercent(summary.winRate);
-      statWinrateSub.textContent = summary.wins + " wins / " + (summary.games - summary.wins) + " losses";
+      statWinrateSub.textContent = summary.wins + " top 4 / " + (summary.games - summary.wins) + " bottom 4";
       const firstLeader = leaderLabel(summary.firstDeaths.me, summary.firstDeaths.duo, meta.duo.me, meta.duo.duo);
       statFirst.innerHTML = highlightNames(firstLeader, meta.duo);
       statFirstSub.innerHTML = highlightNames(meta.duo.me + " " + summary.firstDeaths.me + " vs " + meta.duo.duo + " " + summary.firstDeaths.duo, meta.duo);

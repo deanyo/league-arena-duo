@@ -359,16 +359,16 @@ function buildVerdict(summary, names, tone, options = {}) {
     : `${summary.comfortBias} leans on ${summary.comfortPick}`;
   const templates = {
     gentle: [
-      () => `${names.me} and ${names.duo} are winning ${winRate} of their arena games together with an average placement of ${avg}. the data suggests ${biasText}, while riot keeps the augment wheel spicy. small sample size, but the vibe says you are close to a clean run.`,
-      () => `${names.me} and ${names.duo} are sitting at ${winRate} wins with an average placement of ${avg}. the data suggests ${biasText}, and riot provides the occasional plot twist. small sample size, but the climb feels within reach.`
+      () => `${names.me} and ${names.duo} are landing top 4 in ${winRate} of their arena games with an average placement of ${avg}. the data suggests ${biasText}, while riot keeps the augment wheel spicy. small sample size, but the vibe says you are close to a clean run.`,
+      () => `${names.me} and ${names.duo} are sitting at a ${winRate} top 4 rate with an average placement of ${avg}. the data suggests ${biasText}, and riot provides the occasional plot twist. small sample size, but the climb feels within reach.`
     ],
     classic: [
-      () => `${names.me} and ${names.duo} are winning ${winRate} of their arena games together with an average placement of ${avg}. the data suggests ${biasText}, while riot keeps the augment wheel spicy. small sample size, but the vibe says you are one good roll away from dominance.`,
-      () => `${names.me} and ${names.duo} are landing at ${winRate} wins with an average placement of ${avg}. the data suggests ${biasText}, and riot keeps the chaos flowing. small sample size, but the energy says this duo is one streak away.`
+      () => `${names.me} and ${names.duo} are landing top 4 in ${winRate} of their arena games with an average placement of ${avg}. the data suggests ${biasText}, while riot keeps the augment wheel spicy. small sample size, but the vibe says you are one good roll away from dominance.`,
+      () => `${names.me} and ${names.duo} are sitting at a ${winRate} top 4 rate with an average placement of ${avg}. the data suggests ${biasText}, and riot keeps the chaos flowing. small sample size, but the energy says this duo is one streak away.`
     ],
     savage: [
-      () => `${names.me} and ${names.duo} are winning ${winRate} of their arena games with an average placement of ${avg}. the data suggests ${biasText}, and riot keeps the augment wheel on hard mode. small sample size, but the comeback arc is still possible.`,
-      () => `${names.me} and ${names.duo} are sitting at ${winRate} wins with an average placement of ${avg}. the data suggests ${biasText}, and riot keeps the chaos dialed up. small sample size, but the next streak could flip the story.`
+      () => `${names.me} and ${names.duo} are landing top 4 in ${winRate} of their arena games with an average placement of ${avg}. the data suggests ${biasText}, and riot keeps the augment wheel on hard mode. small sample size, but the comeback arc is still possible.`,
+      () => `${names.me} and ${names.duo} are sitting at a ${winRate} top 4 rate with an average placement of ${avg}. the data suggests ${biasText}, and riot keeps the chaos dialed up. small sample size, but the next streak could flip the story.`
     ]
   };
   const toneTemplates = templates[tone] || templates.classic;
@@ -513,7 +513,7 @@ async function handleDuo(req, env, ctx) {
 
     stats.games += 1;
     stats.placementTotal += meParticipant.placement || 0;
-    if ((meParticipant.placement || 0) <= 2) {
+    if ((meParticipant.placement || 0) <= 4) {
       stats.wins += 1;
     }
 
@@ -538,7 +538,7 @@ async function handleDuo(req, env, ctx) {
     stats.champions.duo[duoChamp] = (stats.champions.duo[duoChamp] || 0) + 1;
 
     matchesOut.push({
-      result: (meParticipant.placement || 0) <= 2 ? "win" : "loss",
+      result: (meParticipant.placement || 0) <= 4 ? "win" : "loss",
       placement: meParticipant.placement || 0,
       champs: `${formatChampion(meChamp)} + ${formatChampion(duoChamp)}`,
       highlight: buildHighlight(meParticipant, duoParticipant)
