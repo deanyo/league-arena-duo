@@ -500,6 +500,18 @@ function shuffleWithSeed(list, seed) {
   return output;
 }
 
+function parseJsonLenient(raw) {
+  if (!raw) throw new Error("empty json");
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    const block = extractJsonBlock(raw);
+    const text = block || raw;
+    const cleaned = text.replace(/,\s*([}\]])/g, "$1");
+    return JSON.parse(cleaned);
+  }
+}
+
 function collapseWhitespace(text) {
   return String(text || "").replace(/\s+/g, " ").trim();
 }
@@ -661,13 +673,9 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
   const raw = data.choices?.[0]?.message?.content || "";
   let parsed;
   try {
-    parsed = JSON.parse(raw);
+    parsed = parseJsonLenient(raw);
   } catch (error) {
-    const jsonText = extractJsonBlock(raw);
-    if (!jsonText) {
-      throw new Error("openai invalid json");
-    }
-    parsed = JSON.parse(jsonText);
+    throw new Error(error.message || "openai invalid json");
   }
   if (!parsed || !Array.isArray(parsed.roasts)) {
     throw new Error("openai invalid roasts");
