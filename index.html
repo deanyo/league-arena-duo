@@ -251,6 +251,26 @@
       font-size: 10px;
       color: var(--muted);
     }
+    .blame-breakdown {
+      margin-top: 10px;
+      display: grid;
+      gap: 6px;
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .blame-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .blame-key {
+      text-transform: lowercase;
+      color: var(--muted);
+    }
+    .blame-val {
+      color: var(--ink);
+      text-align: right;
+    }
     .list {
       margin: 0;
       padding: 0;
@@ -323,6 +343,7 @@
       font-size: 9px;
       text-transform: uppercase;
       letter-spacing: 0.04em;
+      margin-left: 4px;
     }
     .tier-s { color: var(--accent); border-color: var(--accent); }
     .tier-a { color: var(--accent-3); border-color: var(--accent-3); }
@@ -542,18 +563,21 @@
           <div class="blame-value" id="blame-me">--</div>
           <div class="blame-bar"><span id="blame-me-bar"></span></div>
           <div class="blame-note" id="blame-me-note">loading data</div>
+          <div class="blame-breakdown" id="blame-me-breakdown"></div>
         </div>
         <div class="blame-card">
           <div class="blame-label name-duo" id="blame-duo-label">duo</div>
           <div class="blame-value" id="blame-duo">--</div>
           <div class="blame-bar"><span id="blame-duo-bar"></span></div>
           <div class="blame-note" id="blame-duo-note">loading data</div>
+          <div class="blame-breakdown" id="blame-duo-breakdown"></div>
         </div>
         <div class="blame-card">
           <div class="blame-label">riot</div>
           <div class="blame-value" id="blame-riot">--</div>
           <div class="blame-bar"><span id="blame-riot-bar"></span></div>
           <div class="blame-note" id="blame-riot-note">loading data</div>
+          <div class="blame-breakdown" id="blame-riot-breakdown"></div>
         </div>
       </div>
     </section>
@@ -644,13 +668,16 @@
     const blameMeBar = document.getElementById("blame-me-bar");
     const blameMeLabel = document.getElementById("blame-me-label");
     const blameMeNote = document.getElementById("blame-me-note");
+    const blameMeBreakdown = document.getElementById("blame-me-breakdown");
     const blameDuo = document.getElementById("blame-duo");
     const blameDuoBar = document.getElementById("blame-duo-bar");
     const blameDuoLabel = document.getElementById("blame-duo-label");
     const blameDuoNote = document.getElementById("blame-duo-note");
+    const blameDuoBreakdown = document.getElementById("blame-duo-breakdown");
     const blameRiot = document.getElementById("blame-riot");
     const blameRiotBar = document.getElementById("blame-riot-bar");
     const blameRiotNote = document.getElementById("blame-riot-note");
+    const blameRiotBreakdown = document.getElementById("blame-riot-breakdown");
 
     const roastList = document.getElementById("roast-list");
     const matchTable = document.getElementById("match-table");
@@ -694,13 +721,39 @@
         }
       },
       blame: {
-        me: { share: 0.34, reason: "tests limits early" },
-        duo: { share: 0.41, reason: "ult collector" },
-        riot: { share: 0.25, reason: "augment rng with opinions" }
+        me: {
+          share: 0.34,
+          reason: "first to fall",
+          breakdown: [
+            { label: "execution", value: "first deaths 5 (36%)" },
+            { label: "impact", value: "damage share 48%" },
+            { label: "economy", value: "low items 22%" },
+            { label: "meta", value: "S/A picks 41%" }
+          ]
+        },
+        duo: {
+          share: 0.41,
+          reason: "damage debt",
+          breakdown: [
+            { label: "execution", value: "first deaths 9 (64%)" },
+            { label: "impact", value: "damage share 52%" },
+            { label: "economy", value: "low items 28%" },
+            { label: "meta", value: "S/A picks 55%" }
+          ]
+        },
+        riot: {
+          share: 0.25,
+          reason: "volatility tax",
+          breakdown: [
+            { label: "volatility", value: "placement swing 1.42" },
+            { label: "close exits", value: "5 close exits" },
+            { label: "early exits", value: "2 early exits" }
+          ]
+        }
       },
       roasts: [
         { title: "first death trophy", body: "MichyeoHEY is first down in 41% of rounds. the data suggests early enthusiasm." },
-        { title: "ult hoarder", body: "6 rounds ended with MichyeoHEY still holding ultimate. historic preservation society." },
+        { title: "streak watch", body: "top 4 streak hit 4. momentum is real." },
         { title: "comfort lock", body: "jinx shows up in every other match. comfort pick or lifestyle choice." },
         { title: "clutch moments", body: "hugegamer secures the last takedown in 8 rounds. hero arc confirmed." }
       ],
@@ -1063,6 +1116,10 @@
       blameRiot.textContent = formatPercent(blame.riot.share);
       blameRiotBar.style.width = Math.round(blame.riot.share * 100) + "%";
       blameRiotNote.textContent = blame.riot.reason;
+
+      renderBlameBreakdown(blameMeBreakdown, blame.me.breakdown || [], data.meta.duo);
+      renderBlameBreakdown(blameDuoBreakdown, blame.duo.breakdown || [], data.meta.duo);
+      renderBlameBreakdown(blameRiotBreakdown, blame.riot.breakdown || [], null);
     }
 
     function renderRoasts(roasts, names, championNames) {
@@ -1077,6 +1134,33 @@
         renderDecoratedText(body, roast.body, names, championNames);
         item.append(title, body);
         roastList.appendChild(item);
+      });
+    }
+
+    function renderBlameBreakdown(container, breakdown, names) {
+      while (container.firstChild) container.removeChild(container.firstChild);
+      if (!breakdown || breakdown.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "blame-line";
+        empty.textContent = "no details";
+        container.appendChild(empty);
+        return;
+      }
+      breakdown.forEach((entry) => {
+        const row = document.createElement("div");
+        row.className = "blame-line";
+        const label = document.createElement("span");
+        label.className = "blame-key";
+        label.textContent = entry.label || "detail";
+        const value = document.createElement("span");
+        value.className = "blame-val";
+        if (names) {
+          value.innerHTML = highlightNames(entry.value || "--", names);
+        } else {
+          value.textContent = entry.value || "--";
+        }
+        row.append(label, value);
+        container.appendChild(row);
       });
     }
 
@@ -1175,6 +1259,9 @@
       blameRiot.textContent = "--";
       blameRiotBar.style.width = "0%";
       blameRiotNote.textContent = "api error";
+      blameMeBreakdown.textContent = "no data";
+      blameDuoBreakdown.textContent = "no data";
+      blameRiotBreakdown.textContent = "no data";
 
       clearList(roastList);
       const roastItem = document.createElement("li");

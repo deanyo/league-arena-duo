@@ -328,6 +328,10 @@ function normalizeCachedPayload(data) {
   if (!data.insights) {
     data.insights = buildFallbackInsights(summary, matches);
   }
+  if (!data.blame || !data.blame.me?.breakdown || !data.blame.duo?.breakdown) {
+    const names = data.meta?.duo || { me: "me", duo: "duo" };
+    data.blame = buildBlame(summary, names, data.insights);
+  }
   if (!Number.isFinite(summary.top4Streak) || !Number.isFinite(summary.bottom4Streak)) {
     const fallbackStreaks = data.insights?.streaks || { top4: 0, bottom4: 0 };
     summary.top4Streak = Number.isFinite(summary.top4Streak) ? summary.top4Streak : fallbackStreaks.top4;
@@ -1370,29 +1374,132 @@ function buildVerdict(summary, names, tone, options = {}) {
   return template ? template() : "";
 }
 
-function buildBlame(summary, names) {
+function calcPlacementStdDev(placements, avgPlacement, games) {
+  if (!games) return 0;
+  let variance = 0;
+  for (let i = 1; i <= 8; i += 1) {
+    const count = placements?.[i] || 0;
+    variance += count * Math.pow(i - avgPlacement, 2);
+  }
+  variance = variance / games;
+  return Math.sqrt(variance);
+}
+
+function buildBlame(summary, names, insights) {
   if (summary.games === 0) {
     return {
-      me: { share: 0.33, reason: "no data yet" },
-      duo: { share: 0.33, reason: "no data yet" },
-      riot: { share: 0.34, reason: "no data yet" }
+      me: { share: 0.33, reason: "no data yet", breakdown: [] },
+      duo: { share: 0.33, reason: "no data yet", breakdown: [] },
+      riot: { share: 0.34, reason: "no data yet", breakdown: [] }
     };
   }
 
-  const losses = summary.games - summary.wins;
-  const meScore = 1 + summary.firstDeaths.me * 1.3;
-  const duoScore = 1 + summary.firstDeaths.duo * 1.3;
-  const riotScore = 1 + losses * 0.8 + (1 - summary.winRate) * 3;
+  const games = summary.games || 0;
+  const totalFirstDeaths = summary.firstDeaths.me + summary.firstDeaths.duo;
+  const shares = insights?.shares || {};
+  const items = insights?.items || null;
+  const meta = insights?.meta || null;
+  const anvil = insights?.anvil || null;
+  const hasCombatStats = Boolean(insights?.flags?.hasCombatStats);
+  const placements = insights?.placements || {};
+  const avgPlacement = Number.isFinite(summary.avgPlacement) ? summary.avgPlacement : 0;
+  const placementStdDev = calcPlacementStdDev(placements, avgPlacement, games);
+  const closeExits = (placements[5] || 0) + (placements[6] || 0);
+  const earlyExits = (placements[7] || 0) + (placements[8] || 0);
+  const closeRate = games > 0 ? closeExits / games : 0;
+
+  const executionScore = (count) => count * 1.2;
+  const impactScore = (share) => (hasCombatStats ? Math.max(0.45 - (share || 0), 0) * 10 : 0);
+  const economyScore = (rate) => (rate || 0) * 6;
+  const metaScore = (rate) => {
+    if (!Number.isFinite(rate) || summary.winRate >= 0.5) return 0;
+    if (rate >= 0.6) return 1.8;
+    if (rate <= 0.35) return 1.2;
+    return 0.6;
+  };
+  const anvilScore = (rate) => (summary.winRate < 0.5 && rate >= 0.3 ? 1.4 : 0);
+
+  const meScores = {
+    execution: executionScore(summary.firstDeaths.me),
+    impact: impactScore(shares.damage?.me),
+    economy: economyScore(items?.lowRate?.me),
+    meta: metaScore(meta?.me?.metaRate),
+    anvil: anvilScore(anvil?.meRate)
+  };
+  const duoScores = {
+    execution: executionScore(summary.firstDeaths.duo),
+    impact: impactScore(shares.damage?.duo),
+    economy: economyScore(items?.lowRate?.duo),
+    meta: metaScore(meta?.duo?.metaRate),
+    anvil: anvilScore(anvil?.duoRate)
+  };
+
+  const meScore = 1 + meScores.execution + meScores.impact + meScores.economy + meScores.meta + meScores.anvil;
+  const duoScore = 1 + duoScores.execution + duoScores.impact + duoScores.economy + duoScores.meta + duoScores.anvil;
+
+  const volatilityScore = placementStdDev >= 1.8 ? 3 : placementStdDev >= 1.4 ? 2 : placementStdDev >= 1.1 ? 1 : 0;
+  const closeScore = closeRate >= 0.4 ? 2 : closeRate >= 0.25 ? 1 : 0;
+  const riotScore = 1 + volatilityScore + closeScore + (summary.winRate < 0.5 ? 1.2 : 0.6);
+
   const total = meScore + duoScore + riotScore;
 
-  const meReason = summary.firstDeaths.me > summary.firstDeaths.duo ? "first to fall" : "overconfident engages";
-  const duoReason = summary.firstDeaths.duo > summary.firstDeaths.me ? "first to fall" : "combo addict";
-  const riotReason = summary.winRate < 0.5 ? "augment rng" : "balance patch vibes";
+  const topReason = (scores, fallback) => {
+    const entries = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    const top = entries[0];
+    return top && top[1] > 0 ? top[0] : fallback;
+  };
+
+  const reasonMap = {
+    execution: "first to fall",
+    impact: "damage debt",
+    economy: "economy grief",
+    meta: "meta habits",
+    anvil: "anvil gamble"
+  };
+
+  const meReason = reasonMap[topReason(meScores, "coinflip energy")] || "coinflip energy";
+  const duoReason = reasonMap[topReason(duoScores, "coinflip energy")] || "coinflip energy";
+  const riotReason = closeRate >= 0.4
+    ? "close exits"
+    : placementStdDev >= 1.4
+      ? "volatility tax"
+      : summary.winRate < 0.5
+        ? "chaos factor"
+        : "balance patch vibes";
+
+  const formatShare = (value) => (Number.isFinite(value) ? formatPercent(value) : "--");
+  const firstShare = (count) => (totalFirstDeaths > 0 ? formatPercent(count / totalFirstDeaths) : "0%");
+  const economyLine = (rate, anvilRate) => {
+    if (!Number.isFinite(rate)) return "no item data";
+    const base = `low items ${formatPercent(rate)}`;
+    if (Number.isFinite(anvilRate) && anvilRate >= 0.3) {
+      return `${base}; anvil ${formatPercent(anvilRate)}`;
+    }
+    return base;
+  };
+
+  const meBreakdown = [
+    { label: "execution", value: `first deaths ${summary.firstDeaths.me} (${firstShare(summary.firstDeaths.me)})` },
+    { label: "impact", value: hasCombatStats ? `damage share ${formatShare(shares.damage?.me)}` : "no combat data" },
+    { label: "economy", value: economyLine(items?.lowRate?.me, anvil?.meRate) },
+    { label: "meta", value: meta ? `S/A picks ${formatShare(meta.me?.metaRate)}` : "meta offline" }
+  ];
+  const duoBreakdown = [
+    { label: "execution", value: `first deaths ${summary.firstDeaths.duo} (${firstShare(summary.firstDeaths.duo)})` },
+    { label: "impact", value: hasCombatStats ? `damage share ${formatShare(shares.damage?.duo)}` : "no combat data" },
+    { label: "economy", value: economyLine(items?.lowRate?.duo, anvil?.duoRate) },
+    { label: "meta", value: meta ? `S/A picks ${formatShare(meta.duo?.metaRate)}` : "meta offline" }
+  ];
+  const riotBreakdown = [
+    { label: "volatility", value: `placement swing ${placementStdDev.toFixed(2)}` },
+    { label: "close exits", value: `${closeExits} close exits` },
+    { label: "early exits", value: `${earlyExits} early exits` }
+  ];
 
   return {
-    me: { share: meScore / total, reason: meReason },
-    duo: { share: duoScore / total, reason: duoReason },
-    riot: { share: riotScore / total, reason: riotReason }
+    me: { share: meScore / total, reason: meReason, breakdown: meBreakdown },
+    duo: { share: duoScore / total, reason: duoReason, breakdown: duoBreakdown },
+    riot: { share: riotScore / total, reason: riotReason, breakdown: riotBreakdown }
   };
 }
 
@@ -1638,7 +1745,7 @@ async function handleDuo(req, env, ctx) {
 
   const names = { me: mePlayer.name || meInput, duo: duoPlayer.name || duoInput };
   const summary = buildSummary(stats, names, matches);
-  const blame = buildBlame(summary, names);
+  const blame = buildBlame(summary, names, insights);
   let metaStats = null;
   try {
     const tierData = await fetchTierList(env, ctx);
