@@ -1616,8 +1616,36 @@ function buildBlame(summary, names, insights) {
     anvil: "anvil gamble"
   };
 
-  const meReason = reasonMap[topReason(meScores, "coinflip energy")] || "coinflip energy";
-  const duoReason = reasonMap[topReason(duoScores, "coinflip energy")] || "coinflip energy";
+  const formatShare = (value) => (Number.isFinite(value) ? formatPercent(value) : "--");
+  const deathShare = (count) => (totalDeaths > 0 ? formatPercent(count / totalDeaths) : "0%");
+
+  const reasonWithStat = (key, side) => {
+    if (key === "execution") {
+      return `death share (${deathShare(side === "me" ? deathsMe : deathsDuo)})`;
+    }
+    if (key === "impact") {
+      const shareValue = side === "me" ? shares.damage?.me : shares.damage?.duo;
+      return `damage share (${formatShare(shareValue)})`;
+    }
+    if (key === "economy") {
+      const rate = side === "me" ? items?.lowRate?.me : items?.lowRate?.duo;
+      return Number.isFinite(rate) ? `low items (${formatPercent(rate)})` : reasonMap[key];
+    }
+    if (key === "meta") {
+      const rate = side === "me" ? meta?.me?.metaRate : meta?.duo?.metaRate;
+      return Number.isFinite(rate) ? `meta habits (${formatPercent(rate)})` : reasonMap[key];
+    }
+    if (key === "anvil") {
+      const rate = side === "me" ? anvil?.meRate : anvil?.duoRate;
+      return Number.isFinite(rate) ? `anvil gamble (${formatPercent(rate)})` : reasonMap[key];
+    }
+    return reasonMap[key] || "coinflip energy";
+  };
+
+  const meReasonKey = topReason(meScores, "coinflip energy");
+  const duoReasonKey = topReason(duoScores, "coinflip energy");
+  const meReason = reasonWithStat(meReasonKey, "me");
+  const duoReason = reasonWithStat(duoReasonKey, "duo");
   const riotReason = closeRate >= 0.4
     ? "close exits"
     : placementStdDev >= 1.4
@@ -1625,9 +1653,6 @@ function buildBlame(summary, names, insights) {
       : summary.winRate < 0.5
         ? "chaos factor"
         : "balance patch vibes";
-
-  const formatShare = (value) => (Number.isFinite(value) ? formatPercent(value) : "--");
-  const deathShare = (count) => (totalDeaths > 0 ? formatPercent(count / totalDeaths) : "0%");
   const supportLine = (label, count, share) => {
     if (!Number.isFinite(count) || count <= 0) return `no ${label} data`;
     return `${label} ${formatNumber(count)} (${formatShare(share)})`;
