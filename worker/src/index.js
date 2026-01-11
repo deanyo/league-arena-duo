@@ -827,6 +827,66 @@ function stripTierSuffix(name) {
   return String(name || "").replace(/\s*\[[A-Z]\]\s*$/i, "").trim();
 }
 
+const BASE_SLANG = [
+  "snowball",
+  "outplay",
+  "carry",
+  "gap",
+  "coinflip",
+  "throw",
+  "clutch",
+  "hands diff",
+  "draft diff",
+  "statcheck",
+  "stat monkey",
+  "stat stick",
+  "highroll",
+  "lowroll",
+  "gamba",
+  "augment diff",
+  "augment gap",
+  "rng carried",
+  "casino build",
+  "dead augment",
+  "bait augment",
+  "fake scaling",
+  "round one fraud",
+  "healing abuser",
+  "cc prison",
+  "anvil run",
+  "anvil addict",
+  "reroll burner",
+  "perma kite",
+  "no counterplay",
+  "win condition",
+  "tiktok build",
+  "bait item",
+  "fraud champ",
+  "crutch champ",
+  "mental gap",
+  "tilt queue",
+  "ego chall",
+  "main character syndrome"
+];
+
+const SAVAGE_SLANG = [
+  "inting",
+  "feeding",
+  "soft int",
+  "hard int",
+  "run it",
+  "griefing",
+  "hostage",
+  "ff mental"
+];
+
+function buildSlangLine(tone) {
+  const list = tone === "savage"
+    ? BASE_SLANG.concat(SAVAGE_SLANG)
+    : BASE_SLANG;
+  return list.join(", ");
+}
+
 async function generateAiVerdict(summary, names, tone, insights, env) {
   const model = env.OPENAI_MODEL || "gpt-4o-mini";
   const games = summary.games || 0;
@@ -887,6 +947,7 @@ async function generateAiVerdict(summary, names, tone, insights, env) {
     }
   };
 
+  const slangLine = buildSlangLine(tone);
   const system = [
     "You write short, playful verdicts for League of Legends Arena duos.",
     "Arena is 2v2v2v2 with 8 teams; top 4 is a win; 1st place is the top spot.",
@@ -895,7 +956,7 @@ async function generateAiVerdict(summary, names, tone, insights, env) {
     "Never mention first deaths, first blood, or 'first death' language.",
     "Never mention ultimates, ults, or cooldowns.",
     "Never mention crowns; say top-4 wins or first place instead.",
-    "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition, inting, feeding.",
+    `You may use arena/league slang: ${slangLine}.`,
     "No slurs or hateful language. Keep it playful, not personal.",
     "Use deaths only if facts.deaths is present.",
     "Tank share indicates damage taken; support share indicates healing + shielding.",
@@ -1080,6 +1141,7 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
     }
   };
 
+  const slangLine = buildSlangLine(tone);
   const system = [
     "You generate 4 roast cards for League of Legends Arena duos.",
     "Arena is 2v2v2v2 with 8 teams; top 4 is a win; 1st place is the top spot.",
@@ -1090,7 +1152,7 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
     "Never mention first deaths, first blood, or 'first death' language.",
     "Never mention ultimates, ults, or cooldowns.",
     "Never mention crowns; say top-4 wins or first place instead.",
-    "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition, inting, feeding.",
+    `You may use arena/league slang: ${slangLine}.`,
     "No slurs or hateful language. Keep it playful, not personal.",
     "Use deaths only if facts.deaths is present.",
     "Only mention combat share stats if facts.availability.combatShares is true.",
@@ -1165,6 +1227,7 @@ async function generateAiMoments(summary, names, tone, matches, env) {
     matches: items
   };
 
+  const slangLine = buildSlangLine(tone);
   const system = [
     "You write short 'moment' blurbs for each Arena match.",
     "Output JSON only with schema: {\"moments\":[\"...\"]}.",
@@ -1173,7 +1236,7 @@ async function generateAiMoments(summary, names, tone, matches, env) {
     "Never mention first deaths, first blood, or 'first death' language.",
     "Never mention ultimates, ults, or cooldowns.",
     "Never mention crowns; say top-4 wins or first place instead.",
-    "You may use arena/league slang: snowball, outplay, carry, gap, draft diff, statcheck, clutch, highroll, lowroll, gamba, augment diff, anvil run, win condition, inting, feeding.",
+    `You may use arena/league slang: ${slangLine}.`,
     "No slurs or hateful language. Keep it playful, not personal.",
     "Use the provided hint and placement to keep meaning consistent.",
     "Avoid 'ticket' phrases like 'ticket punched'.",
@@ -1562,7 +1625,7 @@ function buildDuoIdentity(winRate, avgPlacement) {
   return "chaos enjoyers";
 }
 
-function buildHighlight(me, duo, placement, seed) {
+function buildHighlight(me, duo, placement, seed, tone) {
   const kills = (me.kills || 0) + (duo.kills || 0);
   const deaths = (me.deaths || 0) + (duo.deaths || 0);
   const assists = (me.assists || 0) + (duo.assists || 0);
@@ -1575,6 +1638,7 @@ function buildHighlight(me, duo, placement, seed) {
   const duoItems = countItems(duo);
   const lowItems = meItems <= 2 || duoItems <= 2;
   const anvilChamp = isAnvilChampion(me.championName) || isAnvilChampion(duo.championName);
+  const savage = tone === "savage";
   const candidates = [];
   const add = (text) => {
     if (!text || candidates.includes(text)) return;
@@ -1594,6 +1658,7 @@ function buildHighlight(me, duo, placement, seed) {
     add("top 4 locked");
     add("kept the run alive");
     add("clutch survive");
+    if (savage) add("highroll hit");
   } else if (placement >= 5) {
     add("bottom 4 exit");
     add("early exit");
@@ -1601,6 +1666,7 @@ function buildHighlight(me, duo, placement, seed) {
     add("lobby ended the run");
     add("bracket collapsed");
     add("early throw");
+    if (savage) add("lowroll angle");
   }
 
   if (kills >= deaths + 8) {
@@ -1612,8 +1678,11 @@ function buildHighlight(me, duo, placement, seed) {
   if (deaths >= kills + 8) {
     add("scrapped hard, fell short");
     add("snowballed on");
-    add("feeding streak");
-    add("inting angle");
+    if (savage) {
+      add("feeding streak");
+      add("inting angle");
+      add("griefing angle");
+    }
     add("gap opened up");
   }
   if (damage >= damageTaken * 1.3 && damage >= 18000) {
@@ -2382,7 +2451,7 @@ async function handleDuo(req, env, ctx) {
       resultLabel,
       placement,
       champs: `${formatChampion(meChamp)} + ${formatChampion(duoChamp)}`,
-      highlight: buildHighlight(meParticipant, duoParticipant, placement, highlightSeed)
+      highlight: buildHighlight(meParticipant, duoParticipant, placement, highlightSeed, tone)
     });
   }
 
