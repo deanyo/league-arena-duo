@@ -202,6 +202,15 @@ function pickVariant(list, seed) {
   return list[Math.floor(Math.random() * list.length)];
 }
 
+function hashString(value) {
+  const text = String(value || "");
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (hash * 31 + text.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
 function formatFirsts(count) {
   const safe = Number.isFinite(count) ? count : 0;
   if (safe === 0) return "no first-place finishes yet";
@@ -854,12 +863,53 @@ function buildDuoIdentity(winRate, avgPlacement) {
   return "chaos enjoyers";
 }
 
-function buildHighlight(me, duo) {
+function buildHighlight(me, duo, placement, seed) {
   const kills = (me.kills || 0) + (duo.kills || 0);
   const deaths = (me.deaths || 0) + (duo.deaths || 0);
-  if (kills >= deaths + 6) return "out-traded the lobby";
-  if (deaths >= kills + 4) return "scrapped hard, fell short";
-  return "even trades, messy finish";
+  const assists = (me.assists || 0) + (duo.assists || 0);
+  const damage = (me.totalDamageDealtToChampions || 0) + (duo.totalDamageDealtToChampions || 0);
+  const damageTaken = (me.totalDamageTaken || 0) + (duo.totalDamageTaken || 0);
+  const healing = (me.totalHeal || 0) + (duo.totalHeal || 0);
+  const ultCasts = (me.spell4Casts || 0) + (duo.spell4Casts || 0);
+  const candidates = [];
+  const add = (text) => {
+    if (!text || candidates.includes(text)) return;
+    candidates.push(text);
+  };
+
+  if (placement === 1) {
+    add("crown secured");
+    add("first place sealed");
+    add("crown run completed");
+  } else if (placement > 0 && placement <= 4) {
+    add("top 4 secured");
+    add("ticket punched for top 4");
+    add("survived the bracket");
+  } else if (placement >= 5) {
+    add("bottom 4 exit");
+    add("early exit ticket");
+    add("lobby ended the run");
+  }
+
+  if (kills >= deaths + 8) add("out-traded the lobby");
+  if (deaths >= kills + 8) add("scrapped hard, fell short");
+  if (damage >= damageTaken * 1.3 && damage >= 18000) add("damage diff posted");
+  if (damageTaken >= damage * 1.3 && damageTaken >= 20000) add("frontline tax paid");
+  if (assists >= kills + 8) add("setup for days");
+  if (kills >= assists + 8) add("finisher instincts");
+  if (healing >= 9000) add("sustain clinic");
+  if (ultCasts === 0) add("ultimates on vacation");
+  if (ultCasts >= 12) add("ults on cooldown");
+  if (placement <= 4 && deaths > kills) add("survived the chaos");
+  if (placement >= 5 && kills > deaths) add("could not close the trades");
+
+  if (candidates.length === 0) {
+    if (kills >= deaths + 6) return "out-traded the lobby";
+    if (deaths >= kills + 4) return "scrapped hard, fell short";
+    return "even trades, messy finish";
+  }
+
+  return pickVariant(candidates, seed);
 }
 
 function toneCopy(tone) {
@@ -1362,11 +1412,16 @@ async function handleDuo(req, env, ctx) {
     stats.champions.me[meChamp] = (stats.champions.me[meChamp] || 0) + 1;
     stats.champions.duo[duoChamp] = (stats.champions.duo[duoChamp] || 0) + 1;
 
+    const resultType = placement === 1 ? "first" : placement <= 4 ? "top4" : "bottom4";
+    const resultLabel = resultType === "first" ? "1st" : resultType === "top4" ? "top 4" : "bottom 4";
+    const highlightSeed = hashString(matchId) + placement * 13;
+
     matchesOut.push({
-      result: (meParticipant.placement || 0) <= 4 ? "win" : "loss",
-      placement: meParticipant.placement || 0,
+      result: resultType,
+      resultLabel,
+      placement,
       champs: `${formatChampion(meChamp)} + ${formatChampion(duoChamp)}`,
-      highlight: buildHighlight(meParticipant, duoParticipant)
+      highlight: buildHighlight(meParticipant, duoParticipant, placement, highlightSeed)
     });
   }
 

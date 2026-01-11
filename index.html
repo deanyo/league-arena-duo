@@ -304,8 +304,13 @@
       color: var(--muted);
       width: fit-content;
     }
-    .chip.win { color: var(--accent-3); }
-    .chip.loss { color: var(--danger); }
+    .chip.first {
+      color: var(--accent);
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+    .chip.top4 { color: var(--accent-3); }
+    .chip.bottom4 { color: var(--danger); }
     .verdict {
       font-size: 14px;
       line-height: 1.7;
@@ -632,11 +637,11 @@
         { title: "clutch moments", body: "hugegamer secures the last takedown in 8 rounds. hero arc confirmed." }
       ],
       matches: [
-        { result: "win", placement: 1, champs: "yasuo + jinx", highlight: "double execute to close" },
-        { result: "loss", placement: 4, champs: "ahri + jinx", highlight: "could not out-run the dash parade" },
-        { result: "win", placement: 2, champs: "pantheon + jinx", highlight: "triple stun chain" },
-        { result: "loss", placement: 3, champs: "lucian + jinx", highlight: "ultimates saved for next game" },
-        { result: "win", placement: 1, champs: "vi + jinx", highlight: "level 2 all-in success" }
+        { result: "first", resultLabel: "1st", placement: 1, champs: "yasuo + jinx", highlight: "crown secured" },
+        { result: "top4", resultLabel: "top 4", placement: 4, champs: "ahri + jinx", highlight: "top 4 secured" },
+        { result: "top4", resultLabel: "top 4", placement: 2, champs: "pantheon + jinx", highlight: "setup for days" },
+        { result: "top4", resultLabel: "top 4", placement: 3, champs: "lucian + jinx", highlight: "survived the chaos" },
+        { result: "first", resultLabel: "1st", placement: 1, champs: "vi + jinx", highlight: "first place sealed" }
       ],
       verdict: "hugegamer and MichyeoHEY are landing top 4 in 59% across 22 arena games, with 4 first-place finishes and an average placement of 2.4. arena scoring: top 4 of 8 teams is a win, first place is the crown. the data suggests MichyeoHEY leans on jinx, while riot keeps the augment wheel spicy. the vibe says you are one good roll away from dominance."
     };
@@ -792,8 +797,25 @@
         const row = document.createElement("div");
         row.className = "match-row";
         const result = document.createElement("div");
-        result.className = "chip " + (match.result === "win" ? "win" : "loss");
-        result.textContent = match.result;
+        const placementValue = match.placement || 0;
+        const resultType = match.result || (placementValue === 1 ? "first" : placementValue <= 4 ? "top4" : "bottom4");
+        const labelMap = {
+          first: "1st",
+          top4: "top 4",
+          bottom4: "bottom 4",
+          win: "top 4",
+          loss: "bottom 4"
+        };
+        const classMap = {
+          first: "first",
+          top4: "top4",
+          bottom4: "bottom4",
+          win: "top4",
+          loss: "bottom4"
+        };
+        const displayLabel = match.resultLabel || labelMap[resultType] || String(resultType);
+        result.className = "chip " + (classMap[resultType] || "bottom4");
+        result.textContent = displayLabel;
         const placement = document.createElement("span");
         placement.textContent = "place " + match.placement;
         const champs = document.createElement("span");
