@@ -1745,7 +1745,6 @@ async function handleDuo(req, env, ctx) {
 
   const names = { me: mePlayer.name || meInput, duo: duoPlayer.name || duoInput };
   const summary = buildSummary(stats, names, matches);
-  const blame = buildBlame(summary, names, insights);
   let metaStats = null;
   try {
     const tierData = await fetchTierList(env, ctx);
@@ -1756,6 +1755,7 @@ async function handleDuo(req, env, ctx) {
   }
 
   const insights = buildInsights(stats, summary, metaStats);
+  const blame = buildBlame(summary, names, insights);
   const roastsAuto = buildRoasts(summary, names, tone, metaStats, insights);
   const headers = { "Cache-Control": `public, max-age=${safeNumber(env.CACHE_TTL_SECONDS, 3600)}` };
 
