@@ -831,6 +831,66 @@ function collapseWhitespace(text) {
   return String(text || "").replace(/\s+/g, " ").trim();
 }
 
+function normalizeToken(text) {
+  return String(text || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function editDistance(a, b) {
+  if (a === b) return 0;
+  const aLen = a.length;
+  const bLen = b.length;
+  if (aLen === 0) return bLen;
+  if (bLen === 0) return aLen;
+  const dp = new Array(bLen + 1);
+  for (let j = 0; j <= bLen; j += 1) dp[j] = j;
+  for (let i = 1; i <= aLen; i += 1) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= bLen; j += 1) {
+      const temp = dp[j];
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + cost);
+      prev = temp;
+    }
+  }
+  return dp[bLen];
+}
+
+function normalizePlayerMentions(text, names) {
+  const players = [
+    { name: names?.me || "", key: normalizeToken(names?.me || "") },
+    { name: names?.duo || "", key: normalizeToken(names?.duo || "") }
+  ].filter((player) => player.key);
+  if (!players.length) return text;
+  return String(text || "").replace(/\b[\w’']+\b/g, (token) => {
+    const match = token.match(/^(.*?)(['’]s)$/i);
+    const base = match ? match[1] : token;
+    const suffix = match ? match[2] : "";
+    const norm = normalizeToken(base);
+    if (!norm) return token;
+    for (const player of players) {
+      if (norm === player.key) return `${player.name}${suffix}`;
+      if (norm.length >= 6 && editDistance(norm, player.key) <= 1) {
+        return `${player.name}${suffix}`;
+      }
+    }
+    return token;
+  });
+}
+
+function normalizeRoastNames(roasts, names) {
+  if (!Array.isArray(roasts)) return roasts;
+  return roasts.map((roast) => ({
+    title: normalizePlayerMentions(roast?.title || "", names),
+    body: normalizePlayerMentions(roast?.body || "", names)
+  }));
+}
+
+function normalizeMomentNames(moments, names) {
+  if (!Array.isArray(moments)) return moments;
+  return moments.map((moment) => normalizePlayerMentions(moment, names));
+}
+
 function stripTierSuffix(name) {
   return String(name || "").replace(/\s*\[[A-Z]\]\s*$/i, "").trim();
 }
@@ -1526,9 +1586,18 @@ async function getAiBundle(summary, names, tone, insights, matches, fallbackRoas
   if (cached) {
     const cachedData = await cached.json();
     if (cachedData && (cachedData.verdict || cachedData.roasts || cachedData.moments)) {
-      const verdict = collapseWhitespace(cachedData.verdict || "") || fallbackVerdict;
-      const roasts = normalizeAiRoasts(cachedData.roasts, fallbackRoasts);
-      const moments = normalizeAiMoments(cachedData.moments, fallbackMoments, matches || []);
+      const verdict = normalizePlayerMentions(
+        collapseWhitespace(cachedData.verdict || "") || fallbackVerdict,
+        names
+      );
+      const roasts = normalizeRoastNames(
+        normalizeAiRoasts(cachedData.roasts, fallbackRoasts),
+        names
+      );
+      const moments = normalizeMomentNames(
+        normalizeAiMoments(cachedData.moments, fallbackMoments, matches || []),
+        names
+      );
       const sources = cachedData.sources || {};
       return {
         verdict,
@@ -1547,9 +1616,15 @@ async function getAiBundle(summary, names, tone, insights, matches, fallbackRoas
   try {
     const rawBundle = await generateAiBundle(summary, names, tone, insights, matches || [], env);
     const verdictText = collapseWhitespace(rawBundle.verdict || "");
-    const verdict = verdictText || fallbackVerdict;
-    const roasts = normalizeAiRoasts(rawBundle.roasts, fallbackRoasts);
-    const moments = normalizeAiMoments(rawBundle.moments, fallbackMoments, matches || []);
+    const verdict = normalizePlayerMentions(verdictText || fallbackVerdict, names);
+    const roasts = normalizeRoastNames(
+      normalizeAiRoasts(rawBundle.roasts, fallbackRoasts),
+      names
+    );
+    const moments = normalizeMomentNames(
+      normalizeAiMoments(rawBundle.moments, fallbackMoments, matches || []),
+      names
+    );
     const verdictSource = verdictText ? "ai" : "ai-fallback";
     const roastsSource = roasts === fallbackRoasts ? "ai-fallback" : "ai";
     const momentsSource = moments === fallbackMoments ? "ai-fallback" : "ai";
@@ -1603,13 +1678,14 @@ async function getAiRoasts(summary, names, tone, insights, fallback, env, ctx, u
   if (cached) {
     const cachedData = await cached.json();
     if (cachedData && Array.isArray(cachedData.roasts)) {
-      return { roasts: normalizeAiRoasts(cachedData.roasts, fallback), source: "ai-cache" };
+      const normalized = normalizeAiRoasts(cachedData.roasts, fallback);
+      return { roasts: normalizeRoastNames(normalized, names), source: "ai-cache" };
     }
   }
 
   try {
     const rawRoasts = await generateAiRoasts(summary, names, tone, insights, env);
-    const roasts = normalizeAiRoasts(rawRoasts, fallback);
+    const roasts = normalizeRoastNames(normalizeAiRoasts(rawRoasts, fallback), names);
     const source = roasts === fallback ? "ai-fallback" : "ai";
     if (source === "ai") {
       const cacheResponse = new Response(JSON.stringify({ roasts }), {
@@ -1650,14 +1726,14 @@ async function getAiMoments(summary, names, tone, insights, matches, env, ctx, u
     const cachedData = await cached.json();
     if (cachedData && Array.isArray(cachedData.moments)) {
       const normalized = normalizeAiMoments(cachedData.moments, matches.map((match) => match.highlight), matches);
-      return { moments: normalized, source: "ai-cache" };
+      return { moments: normalizeMomentNames(normalized, names), source: "ai-cache" };
     }
   }
 
   try {
     const rawMoments = await generateAiMoments(summary, names, tone, matches, env);
     const fallback = matches.map((match) => match.highlight);
-    const moments = normalizeAiMoments(rawMoments, fallback, matches);
+    const moments = normalizeMomentNames(normalizeAiMoments(rawMoments, fallback, matches), names);
     const source = moments === fallback ? "ai-fallback" : "ai";
     if (source === "ai") {
       const cacheResponse = new Response(JSON.stringify({ moments }), {
