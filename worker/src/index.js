@@ -1539,6 +1539,7 @@ function buildBlame(summary, names, insights) {
   const closeExits = (placements[5] || 0) + (placements[6] || 0);
   const earlyExits = (placements[7] || 0) + (placements[8] || 0);
   const closeRate = games > 0 ? closeExits / games : 0;
+  const earlyRate = games > 0 ? earlyExits / games : 0;
 
   const executionScore = (share) => (hasCombatStats ? Math.max((share || 0) - 0.5, 0) * 12 : 0);
   const impactShare = (damageShare, supportShare) => Math.max(damageShare || 0, supportShare || 0);
@@ -1667,9 +1668,9 @@ function buildBlame(summary, names, insights) {
     { label: "meta", value: meta ? `S/A picks ${formatShare(meta.duo?.metaRate)}` : "meta offline" }
   ];
   const riotBreakdown = [
-    { label: "volatility", value: `placement swing ${placementStdDev.toFixed(2)}` },
-    { label: "close exits", value: `${closeExits} close exits` },
-    { label: "early exits", value: `${earlyExits} early exits` }
+    { label: "volatility", value: `placement swing ${placementStdDev.toFixed(2)} (higher = swingier)` },
+    { label: "close exits", value: `5th-6th finishes ${closeExits} (${formatPercent(closeRate)})` },
+    { label: "early exits", value: `7th-8th finishes ${earlyExits} (${formatPercent(earlyRate)})` }
   ];
 
   return {
