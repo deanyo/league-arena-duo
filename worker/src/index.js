@@ -328,10 +328,8 @@ function normalizeCachedPayload(data) {
   if (!data.insights) {
     data.insights = buildFallbackInsights(summary, matches);
   }
-  if (!data.blame || !data.blame.me?.breakdown || !data.blame.duo?.breakdown) {
-    const names = data.meta?.duo || { me: "me", duo: "duo" };
-    data.blame = buildBlame(summary, names, data.insights);
-  }
+  const names = data.meta?.duo || { me: "me", duo: "duo" };
+  data.blame = buildBlame(summary, names, data.insights);
   if (!Number.isFinite(summary.top4Streak) || !Number.isFinite(summary.bottom4Streak)) {
     const fallbackStreaks = data.insights?.streaks || { top4: 0, bottom4: 0 };
     summary.top4Streak = Number.isFinite(summary.top4Streak) ? summary.top4Streak : fallbackStreaks.top4;
