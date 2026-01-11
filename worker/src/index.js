@@ -346,8 +346,6 @@ function buildVerdictFingerprint(summary, tone) {
     avgPlacement,
     summary.firstDeaths?.me || 0,
     summary.firstDeaths?.duo || 0,
-    summary.unusedUlts?.me || 0,
-    summary.unusedUlts?.duo || 0,
     String(summary.comfortBias || "").toLowerCase(),
     String(summary.comfortPick || "").toLowerCase(),
     summary.comfortPickRate || ""
@@ -527,8 +525,6 @@ async function generateAiVerdict(summary, names, tone, env) {
   const avgPlacement = Number.isFinite(summary.avgPlacement) ? Number(summary.avgPlacement.toFixed(2)) : 0;
   const firstDeathsMe = summary.firstDeaths?.me || 0;
   const firstDeathsDuo = summary.firstDeaths?.duo || 0;
-  const unusedUltsMe = summary.unusedUlts?.me || 0;
-  const unusedUltsDuo = summary.unusedUlts?.duo || 0;
   const promptPayload = {
     players: [names.me, names.duo],
     tone,
@@ -543,10 +539,6 @@ async function generateAiVerdict(summary, names, tone, env) {
       firstDeaths: {
         me: firstDeathsMe,
         duo: firstDeathsDuo
-      },
-      unusedUlts: {
-        me: unusedUltsMe,
-        duo: unusedUltsDuo
       },
       comfortBias: summary.comfortBias,
       comfortPick: summary.comfortPick
@@ -637,8 +629,6 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
   const avgPlacement = Number.isFinite(summary.avgPlacement) ? Number(summary.avgPlacement.toFixed(2)) : 0;
   const firstDeathsMe = summary.firstDeaths?.me || 0;
   const firstDeathsDuo = summary.firstDeaths?.duo || 0;
-  const unusedUltsMe = summary.unusedUlts?.me || 0;
-  const unusedUltsDuo = summary.unusedUlts?.duo || 0;
   const shares = insights?.shares || {};
   const hasCombatStats = Boolean(insights?.flags?.hasCombatStats);
   const streaks = insights?.streaks || { top4: 0, bottom4: 0 };
@@ -661,10 +651,6 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
       firstDeaths: {
         me: firstDeathsMe,
         duo: firstDeathsDuo
-      },
-      unusedUlts: {
-        me: unusedUltsMe,
-        duo: unusedUltsDuo
       },
       comfortPick: summary.comfortPick,
       comfortBias: summary.comfortBias,
@@ -1119,11 +1105,8 @@ function toneCopy(tone) {
     gentle: {
       firstTie: "both share the first deaths evenly. the data suggests mutual bravery.",
       firstLead: (leader, rate) => `${leader} takes the first nap in ${rate}. the data suggests early enthusiasm.`,
-      ultTie: "both are saving ultimates for the perfect moment.",
-      ultLead: (leader, count) => `${leader} held ultimate in ${count} rounds. patience, or optimism.`,
       comfortTie: (pick) => `${pick} appears on both sides. comfort pick energy.`,
       comfortLead: (pick, rate) => `${pick} shows up in ${rate}. leaning into what feels safe.`,
-      ultClean: "no unused ult deaths on record. discipline looks good on you.",
       damageLead: (leader, share) => `${leader} handles ${formatPercent(share)} of duo damage. steady carry energy.`,
       damageTie: "damage is split almost evenly. shared workload, shared glory.",
       tankLead: (leader, share) => `${leader} absorbs ${formatPercent(share)} of the damage. frontline heart.`,
@@ -1148,11 +1131,8 @@ function toneCopy(tone) {
     classic: {
       firstTie: "both players trade first deaths evenly. the data suggests shared bravery.",
       firstLead: (leader, rate) => `${leader} is first down in ${rate}. the data suggests early enthusiasm.`,
-      ultTie: "both players are saving ultimates for a future patch.",
-      ultLead: (leader, count) => `${leader} ended ${count} games with ultimate unused. preservation society certified.`,
       comfortTie: (pick) => `${pick} shows up in both rotations. shared comfort pick energy.`,
       comfortLead: (pick, rate) => `${pick} shows up in ${rate}. comfort pick or lifestyle choice.`,
-      ultClean: "no unused ult deaths on record. discipline or paranoia.",
       damageLead: (leader, share) => `${leader} deals ${formatPercent(share)} of duo damage. backpack tax applied.`,
       damageTie: "damage is split down the middle. shared workload, shared blame.",
       tankLead: (leader, share) => `${leader} absorbs ${formatPercent(share)} of incoming damage. frontline tax payer.`,
@@ -1177,11 +1157,8 @@ function toneCopy(tone) {
     savage: {
       firstTie: "both players speedrun the first death at equal pace. balance achieved.",
       firstLead: (leader, rate) => `${leader} hits the grey screen first in ${rate}. fearless, or just fast.`,
-      ultTie: "both players are hoarding ultimates like collectibles.",
-      ultLead: (leader, count) => `${leader} saved ultimate in ${count} rounds. museum curator energy.`,
       comfortTie: (pick) => `${pick} appears on both sides. commitment level: unshakable.`,
       comfortLead: (pick, rate) => `${pick} shows up in ${rate}. one-pick lifestyle confirmed.`,
-      ultClean: "no unused ult deaths at all. sweat-level discipline.",
       damageLead: (leader, share) => `${leader} delivers ${formatPercent(share)} of duo damage. backpack surcharge applied.`,
       damageTie: "damage is split evenly. co-op blame agreement signed.",
       tankLead: (leader, share) => `${leader} absorbs ${formatPercent(share)} of the damage. frontline tax paid in full.`,
@@ -1234,23 +1211,6 @@ function buildRoasts(summary, names, tone, metaStats, insights) {
     addUnique(pool, firstRoast);
   }
 
-  const totalUnused = summary.unusedUlts.me + summary.unusedUlts.duo;
-  const ultLeader = summary.unusedUlts.me === summary.unusedUlts.duo
-    ? "tied"
-    : summary.unusedUlts.me > summary.unusedUlts.duo
-      ? names.me
-      : names.duo;
-  const ultCount = ultLeader === names.me ? summary.unusedUlts.me : summary.unusedUlts.duo;
-  const ultBody = totalUnused === 0
-    ? copy.ultClean
-    : ultLeader === "tied"
-      ? copy.ultTie
-      : copy.ultLead(ultLeader, ultCount);
-  const ultTitle = totalUnused === 0 ? "ult discipline" : "ult hoarder";
-  const ultRoast = { title: ultTitle, body: ultBody };
-  addUnique(fallback, ultRoast);
-  addUnique(pool, ultRoast);
-
   const comfortBody = summary.comfortBias === "tied"
     ? copy.comfortTie(summary.comfortPick)
     : copy.comfortLead(summary.comfortPick, summary.comfortPickRate);
@@ -1258,6 +1218,17 @@ function buildRoasts(summary, names, tone, metaStats, insights) {
   addUnique(fallback, comfortRoast);
   if ((summary.comfortPickRateValue || 0) >= 0.35) {
     addUnique(pool, comfortRoast);
+  }
+
+  const streaks = insights?.streaks;
+  if (streaks?.top4 >= 3 && streaks.top4 >= (streaks.bottom4 || 0)) {
+    const streakRoast = { title: "streak watch", body: copy.streakHot(streaks.top4) };
+    addUnique(fallback, streakRoast);
+    addUnique(pool, streakRoast);
+  } else if (streaks?.bottom4 >= 3) {
+    const streakRoast = { title: "streak watch", body: copy.streakCold(streaks.bottom4) };
+    addUnique(fallback, streakRoast);
+    addUnique(pool, streakRoast);
   }
 
   const metaRoast = buildMetaRoast(metaStats, names, tone);
@@ -1302,13 +1273,6 @@ function buildRoasts(summary, names, tone, metaStats, insights) {
   const deathLeader = pickDominant(shares?.deaths);
   if (deathLeader) {
     addUnique(pool, { title: "grey screen", body: copy.deathLead(deathLeader.name, deathLeader.share) });
-  }
-
-  const streaks = insights?.streaks;
-  if (streaks?.top4 >= 3 && streaks.top4 >= (streaks.bottom4 || 0)) {
-    addUnique(pool, { title: "streak watch", body: copy.streakHot(streaks.top4) });
-  } else if (streaks?.bottom4 >= 3) {
-    addUnique(pool, { title: "streak watch", body: copy.streakCold(streaks.bottom4) });
   }
 
   const diversity = insights?.diversity?.combined || 0;
@@ -1416,13 +1380,13 @@ function buildBlame(summary, names) {
   }
 
   const losses = summary.games - summary.wins;
-  const meScore = 1 + summary.firstDeaths.me * 1.3 + summary.unusedUlts.me * 1.2;
-  const duoScore = 1 + summary.firstDeaths.duo * 1.3 + summary.unusedUlts.duo * 1.2;
+  const meScore = 1 + summary.firstDeaths.me * 1.3;
+  const duoScore = 1 + summary.firstDeaths.duo * 1.3;
   const riotScore = 1 + losses * 0.8 + (1 - summary.winRate) * 3;
   const total = meScore + duoScore + riotScore;
 
-  const meReason = summary.unusedUlts.me > 0 ? "ult collector" : summary.firstDeaths.me > summary.firstDeaths.duo ? "first to fall" : "overconfident engages";
-  const duoReason = summary.unusedUlts.duo > 0 ? "ult collector" : summary.firstDeaths.duo > summary.firstDeaths.me ? "first to fall" : "combo addict";
+  const meReason = summary.firstDeaths.me > summary.firstDeaths.duo ? "first to fall" : "overconfident engages";
+  const duoReason = summary.firstDeaths.duo > summary.firstDeaths.me ? "first to fall" : "combo addict";
   const riotReason = summary.winRate < 0.5 ? "augment rng" : "balance patch vibes";
 
   return {
@@ -1467,7 +1431,6 @@ function buildSummary(stats, names, matchCount) {
     firstRate: formatPercent(firstRate),
     firstDeaths: stats.firstDeaths,
     firstDeathRate: formatPercent(firstDeathRate),
-    unusedUlts: stats.unusedUlts,
     comfortBias,
     comfortPick: formatChampion(comfortPick || "unknown"),
     comfortPickRate: formatPercent(Math.max(meComfortRate, duoComfortRate)),
@@ -1568,7 +1531,6 @@ async function handleDuo(req, env, ctx) {
     firsts: 0,
     placementTotal: 0,
     firstDeaths: { me: 0, duo: 0 },
-    unusedUlts: { me: 0, duo: 0 },
     champions: { me: {}, duo: {} },
     kills: { me: 0, duo: 0 },
     assists: { me: 0, duo: 0 },
@@ -1631,13 +1593,6 @@ async function handleDuo(req, env, ctx) {
       stats.firstDeaths.me += 1;
     } else if (duoDeaths > meDeaths) {
       stats.firstDeaths.duo += 1;
-    }
-
-    if ((meParticipant.spell4Casts || 0) === 0 && meDeaths > 0) {
-      stats.unusedUlts.me += 1;
-    }
-    if ((duoParticipant.spell4Casts || 0) === 0 && duoDeaths > 0) {
-      stats.unusedUlts.duo += 1;
     }
 
     const meKills = meParticipant.kills || 0;
