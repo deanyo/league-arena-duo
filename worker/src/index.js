@@ -305,7 +305,8 @@ function buildFallbackInsights(summary, matches) {
     diversity: { me: 0, duo: 0, combined: 0 },
     meta: null,
     items: { meAvg: 0, duoAvg: 0, lowRate: { me: 0, duo: 0 } },
-    anvil: { meRate: 0, duoRate: 0, meTop: "", duoTop: "" }
+    anvil: { meRate: 0, duoRate: 0, meTop: "", duoTop: "" },
+    flags: { hasCombatStats: false }
   };
 }
 
@@ -398,6 +399,7 @@ function buildInsights(stats, summary, metaStats) {
   const damageTakenTotal = sum(stats.damageTaken);
   const healingTotal = sum(stats.healing);
   const goldTotal = sum(stats.gold);
+  const hasCombatStats = damageTotal > 0 || killsTotal > 0 || assistsTotal > 0 || deathsTotal > 0;
 
   const uniqueMe = Object.keys(stats.champions.me || {}).length;
   const uniqueDuo = Object.keys(stats.champions.duo || {}).length;
@@ -453,7 +455,8 @@ function buildInsights(stats, summary, metaStats) {
       duoRate: anvilDuoRate,
       meTop: formatChampion(anvilMeTop.name || ""),
       duoTop: formatChampion(anvilDuoTop.name || "")
-    }
+    },
+    flags: { hasCombatStats }
   };
 }
 
@@ -637,6 +640,7 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
   const unusedUltsMe = summary.unusedUlts?.me || 0;
   const unusedUltsDuo = summary.unusedUlts?.duo || 0;
   const shares = insights?.shares || {};
+  const hasCombatStats = Boolean(insights?.flags?.hasCombatStats);
   const streaks = insights?.streaks || { top4: 0, bottom4: 0 };
   const diversity = insights?.diversity || { combined: 0 };
   const placements = insights?.placements || {};
@@ -666,27 +670,35 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
       comfortBias: summary.comfortBias,
       placements,
       streaks,
-      shares: {
-        kills: {
-          me: formatPercent(shares.kills?.me || 0),
-          duo: formatPercent(shares.kills?.duo || 0)
-        },
-        assists: {
-          me: formatPercent(shares.assists?.me || 0),
-          duo: formatPercent(shares.assists?.duo || 0)
-        },
-        deaths: {
-          me: formatPercent(shares.deaths?.me || 0),
-          duo: formatPercent(shares.deaths?.duo || 0)
-        },
-        damage: {
-          me: formatPercent(shares.damage?.me || 0),
-          duo: formatPercent(shares.damage?.duo || 0)
-        },
-        tank: {
-          me: formatPercent(shares.tank?.me || 0),
-          duo: formatPercent(shares.tank?.duo || 0)
-        }
+      shares: hasCombatStats
+        ? {
+            kills: {
+              me: formatPercent(shares.kills?.me || 0),
+              duo: formatPercent(shares.kills?.duo || 0)
+            },
+            assists: {
+              me: formatPercent(shares.assists?.me || 0),
+              duo: formatPercent(shares.assists?.duo || 0)
+            },
+            deaths: {
+              me: formatPercent(shares.deaths?.me || 0),
+              duo: formatPercent(shares.deaths?.duo || 0)
+            },
+            damage: {
+              me: formatPercent(shares.damage?.me || 0),
+              duo: formatPercent(shares.damage?.duo || 0)
+            },
+            tank: {
+              me: formatPercent(shares.tank?.me || 0),
+              duo: formatPercent(shares.tank?.duo || 0)
+            }
+          }
+        : null,
+      availability: {
+        combatShares: hasCombatStats,
+        meta: Boolean(meta),
+        items: Boolean(items),
+        anvil: Boolean(anvil)
       },
       diversity: {
         combined: diversity.combined || 0
@@ -725,6 +737,7 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
     "Titles: 2-4 words, lowercase. Bodies: 1-2 sentences.",
     "Use only the provided facts and numbers; do not invent or infer extra stats.",
     "Do not use comparative claims unless the exact percentage is provided.",
+    "Only mention combat share stats if facts.availability.combatShares is true.",
     "Avoid repeating the same fact across cards.",
     "Mention each player at least once across the set.",
     "Include a meta/off-meta card if meta data is present.",
@@ -773,13 +786,6 @@ async function getAiRoasts(summary, names, tone, insights, fallback, env, ctx, u
   }
   if (!insights) {
     return { roasts: fallback, source: "ai-fallback", error: options.debug ? "missing insights" : undefined };
-  }
-  const noCombatStats = (insights.damage?.total || 0) === 0
-    && (insights.kills?.total || 0) === 0
-    && (insights.assists?.total || 0) === 0
-    && (insights.deaths?.total || 0) === 0;
-  if (noCombatStats) {
-    return { roasts: fallback, source: "ai-fallback", error: options.debug ? "insights missing combat stats" : undefined };
   }
 
   const ttl = safeNumber(env.AI_ROASTS_TTL_SECONDS, 86400);
