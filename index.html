@@ -1218,7 +1218,7 @@
       statGames.textContent = "--";
       statGamesSub.textContent = "no data";
       statWinrate.textContent = "--";
-      statWinrateSub.textContent = "check api key";
+      statWinrateSub.textContent = safeMessage;
       statFirst.textContent = "--";
       statFirstSub.textContent = "no data";
       statDamage.textContent = "--";
@@ -1385,7 +1385,16 @@
         headers: { "Accept": "application/json" }
       });
       if (!response.ok) {
-        throw new Error("api error");
+        let message = "api error";
+        try {
+          const payload = await response.json();
+          if (payload && payload.error) {
+            message = String(payload.error);
+          }
+        } catch (error) {
+          message = "api error";
+        }
+        throw new Error(message);
       }
       return response.json();
     }

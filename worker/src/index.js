@@ -993,7 +993,7 @@ async function riotFetch(url, env) {
     }
   });
   if (response.status === 429) {
-    throw new Error("rate limit");
+    throw new Error("riot rate limit");
   }
   if (!response.ok) {
     const text = await response.text();
@@ -1903,7 +1903,11 @@ export default {
       try {
         return await handleDuo(req, env, ctx);
       } catch (error) {
-        return jsonResponse({ error: error.message || "Server error" }, 500);
+        const message = error?.message || "Server error";
+        if (message === "riot rate limit" || message === "rate limit") {
+          return jsonResponse({ error: "riot rate limit" }, 429);
+        }
+        return jsonResponse({ error: message }, 500);
       }
     }
 
