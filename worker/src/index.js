@@ -203,8 +203,15 @@ function pickVariant(list, seed) {
 }
 
 function formatFirsts(count) {
-  if (count === 1) return "1 first-place finish";
-  return `${count} first-place finishes`;
+  const safe = Number.isFinite(count) ? count : 0;
+  if (safe === 0) return "no first-place finishes yet";
+  if (safe === 1) return "1 first-place finish";
+  return `${safe} first-place finishes`;
+}
+
+function smallSamplePrefix(games) {
+  if (!Number.isFinite(games) || games < 8) return "small sample size, but ";
+  return "";
 }
 
 function normalizeChampionKey(name) {
@@ -443,7 +450,8 @@ function toneCopy(tone) {
       comfortLead: (pick, rate) => `${pick} shows up in ${rate}. leaning into what feels safe.`,
       clutch: (summary) => {
         const firsts = formatFirsts(summary.firsts);
-        return `top 4 rate sits at ${formatPercent(summary.winRate)} with ${firsts}. small sample size, but the duo feels ${summary.winRate >= 0.55 ? "steady" : "swingy"}.`;
+        const prefix = smallSamplePrefix(summary.games);
+        return `top 4 rate sits at ${formatPercent(summary.winRate)} with ${firsts}. ${prefix}the duo feels ${summary.winRate >= 0.55 ? "steady" : "swingy"}.`;
       }
     },
     classic: {
@@ -455,7 +463,8 @@ function toneCopy(tone) {
       comfortLead: (pick, rate) => `${pick} shows up in ${rate}. comfort pick or lifestyle choice.`,
       clutch: (summary) => {
         const firsts = formatFirsts(summary.firsts);
-        return `top 4 rate sits at ${formatPercent(summary.winRate)} with ${firsts}. small sample size, but the duo looks ${summary.winRate >= 0.55 ? "dangerous" : "swingy"}.`;
+        const prefix = smallSamplePrefix(summary.games);
+        return `top 4 rate sits at ${formatPercent(summary.winRate)} with ${firsts}. ${prefix}the duo looks ${summary.winRate >= 0.55 ? "dangerous" : "swingy"}.`;
       }
     },
     savage: {
@@ -467,7 +476,8 @@ function toneCopy(tone) {
       comfortLead: (pick, rate) => `${pick} shows up in ${rate}. one-pick lifestyle confirmed.`,
       clutch: (summary) => {
         const firsts = formatFirsts(summary.firsts);
-        return `top 4 rate sits at ${formatPercent(summary.winRate)} with ${firsts}. small sample size, but the duo looks ${summary.winRate >= 0.55 ? "dangerous" : "chaotic"}.`;
+        const prefix = smallSamplePrefix(summary.games);
+        return `top 4 rate sits at ${formatPercent(summary.winRate)} with ${firsts}. ${prefix}the duo looks ${summary.winRate >= 0.55 ? "dangerous" : "chaotic"}.`;
       }
     }
   };
@@ -518,24 +528,32 @@ function buildRoasts(summary, names, tone, metaStats) {
 }
 
 function buildVerdict(summary, names, tone, options = {}) {
+  const games = Number.isFinite(summary.games) ? summary.games : 0;
+  if (games === 0) {
+    return `${names.me} and ${names.duo} have no shared arena games in this window. widen the match scan or double-check spellings.`;
+  }
   const winRate = formatPercent(summary.winRate);
   const avg = summary.avgPlacement.toFixed(1);
-  const firsts = formatFirsts(summary.firsts);
+  const firstsCount = Number.isFinite(summary.firsts) ? summary.firsts : 0;
+  const firsts = formatFirsts(firstsCount);
+  const gamesText = games === 1 ? "1 arena game" : `${games} arena games`;
+  const arenaContext = "arena scoring: top 4 of 8 teams is a win, first place is the crown";
+  const samplePrefix = smallSamplePrefix(games);
   const biasText = summary.comfortBias === "tied"
     ? `both lean on ${summary.comfortPick}`
     : `${summary.comfortBias} leans on ${summary.comfortPick}`;
   const templates = {
     gentle: [
-      () => `${names.me} and ${names.duo} are landing top 4 in ${winRate} of their arena games with ${firsts} and an average placement of ${avg}. the data suggests ${biasText}, while riot keeps the augment wheel spicy. small sample size, but the vibe says you are close to a clean run.`,
-      () => `${names.me} and ${names.duo} are sitting at a ${winRate} top 4 rate with ${firsts} and an average placement of ${avg}. the data suggests ${biasText}, and riot provides the occasional plot twist. small sample size, but the climb feels within reach.`
+      () => `${names.me} and ${names.duo} are landing top 4 in ${winRate} across ${gamesText}, with ${firsts} and an average placement of ${avg}. ${arenaContext}. the data suggests ${biasText}, while riot keeps the augment wheel spicy. ${samplePrefix}the vibe says you are close to a clean run.`,
+      () => `${names.me} and ${names.duo} are sitting at a ${winRate} top 4 rate across ${gamesText}, with ${firsts} and an average placement of ${avg}. ${arenaContext}. the data suggests ${biasText}, and riot provides the occasional plot twist. ${samplePrefix}the climb feels within reach.`
     ],
     classic: [
-      () => `${names.me} and ${names.duo} are landing top 4 in ${winRate} of their arena games with ${firsts} and an average placement of ${avg}. the data suggests ${biasText}, while riot keeps the augment wheel spicy. small sample size, but the vibe says you are one good roll away from dominance.`,
-      () => `${names.me} and ${names.duo} are sitting at a ${winRate} top 4 rate with ${firsts} and an average placement of ${avg}. the data suggests ${biasText}, and riot keeps the chaos flowing. small sample size, but the energy says this duo is one streak away.`
+      () => `${names.me} and ${names.duo} are landing top 4 in ${winRate} across ${gamesText}, with ${firsts} and an average placement of ${avg}. ${arenaContext}. the data suggests ${biasText}, while riot keeps the augment wheel spicy. ${samplePrefix}the vibe says you are one good roll away from dominance.`,
+      () => `${names.me} and ${names.duo} are sitting at a ${winRate} top 4 rate across ${gamesText}, with ${firsts} and an average placement of ${avg}. ${arenaContext}. the data suggests ${biasText}, and riot keeps the chaos flowing. ${samplePrefix}the energy says this duo is one streak away.`
     ],
     savage: [
-      () => `${names.me} and ${names.duo} are landing top 4 in ${winRate} of their arena games with ${firsts} and an average placement of ${avg}. the data suggests ${biasText}, and riot keeps the augment wheel on hard mode. small sample size, but the comeback arc is still possible.`,
-      () => `${names.me} and ${names.duo} are sitting at a ${winRate} top 4 rate with ${firsts} and an average placement of ${avg}. the data suggests ${biasText}, and riot keeps the chaos dialed up. small sample size, but the next streak could flip the story.`
+      () => `${names.me} and ${names.duo} are landing top 4 in ${winRate} across ${gamesText}, with ${firsts} and an average placement of ${avg}. ${arenaContext}. the data suggests ${biasText}, and riot keeps the augment wheel on hard mode. ${samplePrefix}the comeback arc is still possible.`,
+      () => `${names.me} and ${names.duo} are sitting at a ${winRate} top 4 rate across ${gamesText}, with ${firsts} and an average placement of ${avg}. ${arenaContext}. the data suggests ${biasText}, and riot keeps the chaos dialed up. ${samplePrefix}the next streak could flip the story.`
     ]
   };
   const toneTemplates = templates[tone] || templates.classic;
@@ -575,7 +593,8 @@ function buildSummary(stats, names, matchCount) {
   const wins = stats.wins;
   const winRate = games > 0 ? wins / games : 0;
   const avgPlacement = games > 0 ? stats.placementTotal / games : 0;
-  const firstRate = games > 0 ? stats.firsts / games : 0;
+  const firsts = Number.isFinite(stats.firsts) ? stats.firsts : 0;
+  const firstRate = games > 0 ? firsts / games : 0;
 
   const meTop = pickTopChampion(stats.champions.me);
   const duoTop = pickTopChampion(stats.champions.duo);
@@ -600,7 +619,7 @@ function buildSummary(stats, names, matchCount) {
     wins,
     winRate,
     avgPlacement,
-    firsts: stats.firsts,
+    firsts,
     firstRate: formatPercent(firstRate),
     firstDeaths: stats.firstDeaths,
     firstDeathRate: formatPercent(firstDeathRate),
