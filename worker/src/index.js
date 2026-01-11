@@ -240,6 +240,11 @@ function buildTierMap(data) {
   if (!data || typeof data !== "object") return null;
   const tiers = data.tiers && typeof data.tiers === "object" ? data.tiers : data;
   const map = {};
+  const aliasMap = {
+    wukong: "monkeyking",
+    nunuwillump: "nunu",
+    nunuandwillump: "nunu"
+  };
   let total = 0;
   ["S", "A", "B", "C", "D"].forEach((tier) => {
     const entries = tiers[tier] || tiers[tier.toLowerCase()] || [];
@@ -247,7 +252,8 @@ function buildTierMap(data) {
     entries.forEach((name) => {
       const key = normalizeChampionKey(name);
       if (!key) return;
-      map[key] = tier;
+      const mappedKey = aliasMap[key] || key;
+      map[mappedKey] = tier;
       total += 1;
     });
   });

@@ -33,8 +33,8 @@ function readInput(inputPath) {
 
 function cleanItem(value) {
   return value
-    .replace(/^[\\s*\\-\\d.)]+/, "")
-    .replace(/\\s+/g, " ")
+    .replace(/^[\s*\-\d.)]+/, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -50,11 +50,11 @@ function parseTierLines(text) {
   const tiers = { S: [], A: [], B: [], C: [], D: [] };
   let current = null;
 
-  text.split(/\\r?\\n/).forEach((line) => {
+  text.split(/\r?\n/).forEach((line) => {
     const trimmed = line.trim();
     if (!trimmed) return;
 
-    const headerMatch = trimmed.match(/^([SABCDE])\\s*[:\\-]\\s*(.*)$/i);
+    const headerMatch = trimmed.match(/^([SABCDE])\s*[:\-]\s*(.*)$/i);
     if (headerMatch) {
       current = headerMatch[1].toUpperCase();
       const items = splitItems(headerMatch[2]);
@@ -62,7 +62,7 @@ function parseTierLines(text) {
       return;
     }
 
-    const soloMatch = trimmed.match(/^([SABCDE])\\s*(?:tier)?\\s*$/i);
+    const soloMatch = trimmed.match(/^([SABCDE])\s*(?:tier)?\s*$/i);
     if (soloMatch) {
       current = soloMatch[1].toUpperCase();
       return;
