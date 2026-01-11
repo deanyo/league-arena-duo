@@ -153,6 +153,12 @@ function normalizeRegion(value, fallback) {
   return PLATFORM_BY_REGION[cleaned] ? cleaned : fallback;
 }
 
+function normalizeTone(value) {
+  const cleaned = (value || "").trim().toLowerCase();
+  if (cleaned === "gentle" || cleaned === "savage") return cleaned;
+  return "classic";
+}
+
 function parseRiotId(value) {
   const trimmed = (value || "").trim();
   if (!trimmed) return null;
@@ -185,6 +191,15 @@ function formatPercent(value) {
 function formatChampion(name) {
   if (!name) return "unknown";
   return name.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+function pickVariant(list, seed) {
+  if (!list || list.length === 0) return "";
+  if (Number.isFinite(seed)) {
+    const index = Math.abs(Math.floor(seed)) % list.length;
+    return list[index];
+  }
+  return list[Math.floor(Math.random() * list.length)];
 }
 
 function isArenaMatch(info) {
@@ -265,7 +280,42 @@ function buildHighlight(me, duo) {
   return "even trades, messy finish";
 }
 
-function buildRoasts(summary, names) {
+function toneCopy(tone) {
+  const copy = {
+    gentle: {
+      firstTie: "both share the first deaths evenly. the data suggests mutual bravery.",
+      firstLead: (leader, rate) => `${leader} takes the first nap in ${rate}. the data suggests early enthusiasm.`,
+      ultTie: "both are saving ultimates for the perfect moment.",
+      ultLead: (leader, count) => `${leader} held ultimate in ${count} rounds. patience, or optimism.`,
+      comfortTie: (pick) => `${pick} appears on both sides. comfort pick energy.`,
+      comfortLead: (pick, rate) => `${pick} shows up in ${rate}. leaning into what feels safe.`,
+      clutch: (winRate) => `win rate sits at ${formatPercent(winRate)}. small sample size, but the duo feels ${winRate >= 0.55 ? "steady" : "swingy"}.`
+    },
+    classic: {
+      firstTie: "both players trade first deaths evenly. the data suggests shared bravery.",
+      firstLead: (leader, rate) => `${leader} is first down in ${rate}. the data suggests early enthusiasm.`,
+      ultTie: "both players are saving ultimates for a future patch.",
+      ultLead: (leader, count) => `${leader} ended ${count} games with ultimate unused. preservation society certified.`,
+      comfortTie: (pick) => `${pick} shows up in both rotations. shared comfort pick energy.`,
+      comfortLead: (pick, rate) => `${pick} shows up in ${rate}. comfort pick or lifestyle choice.`,
+      clutch: (winRate) => `win rate sits at ${formatPercent(winRate)}. small sample size, but the duo looks ${winRate >= 0.55 ? "dangerous" : "swingy"}.`
+    },
+    savage: {
+      firstTie: "both players speedrun the first death at equal pace. balance achieved.",
+      firstLead: (leader, rate) => `${leader} hits the grey screen first in ${rate}. fearless, or just fast.`,
+      ultTie: "both players are hoarding ultimates like collectibles.",
+      ultLead: (leader, count) => `${leader} saved ultimate in ${count} rounds. museum curator energy.`,
+      comfortTie: (pick) => `${pick} appears on both sides. commitment level: unshakable.`,
+      comfortLead: (pick, rate) => `${pick} shows up in ${rate}. one-pick lifestyle confirmed.`,
+      clutch: (winRate) => `win rate sits at ${formatPercent(winRate)}. small sample size, but the duo looks ${winRate >= 0.55 ? "dangerous" : "chaotic"}.`
+    }
+  };
+
+  return copy[tone] || copy.classic;
+}
+
+function buildRoasts(summary, names, tone) {
+  const copy = toneCopy(tone);
   const roasts = [];
   const firstLeader = summary.firstDeaths.me === summary.firstDeaths.duo
     ? "tied"
@@ -273,8 +323,8 @@ function buildRoasts(summary, names) {
       ? names.me
       : names.duo;
   const firstBody = firstLeader === "tied"
-    ? `both players trade first deaths evenly. the data suggests shared bravery.`
-    : `${firstLeader} is first down in ${summary.firstDeathRate}. the data suggests early enthusiasm.`;
+    ? copy.firstTie
+    : copy.firstLead(firstLeader, summary.firstDeathRate);
   roasts.push({ title: "first death trophy", body: firstBody });
 
   const ultLeader = summary.unusedUlts.me === summary.unusedUlts.duo
@@ -284,27 +334,47 @@ function buildRoasts(summary, names) {
       : names.duo;
   const ultCount = ultLeader === names.me ? summary.unusedUlts.me : summary.unusedUlts.duo;
   const ultBody = ultLeader === "tied"
-    ? "both players are saving ultimates for a future patch."
-    : `${ultLeader} ended ${ultCount} games with ultimate unused. preservation society certified.`;
+    ? copy.ultTie
+    : copy.ultLead(ultLeader, ultCount);
   roasts.push({ title: "ult hoarder", body: ultBody });
 
   const comfortBody = summary.comfortBias === "tied"
-    ? `${summary.comfortPick} shows up in both rotations. shared comfort pick energy.`
-    : `${summary.comfortPick} shows up in ${summary.comfortPickRate}. comfort pick or lifestyle choice.`;
+    ? copy.comfortTie(summary.comfortPick)
+    : copy.comfortLead(summary.comfortPick, summary.comfortPickRate);
   roasts.push({ title: "comfort lock", body: comfortBody });
 
   roasts.push({
     title: "clutch window",
-    body: `win rate sits at ${formatPercent(summary.winRate)}. small sample size, but the duo looks ${summary.winRate >= 0.55 ? "dangerous" : "swingy"}.`
+    body: copy.clutch(summary.winRate)
   });
 
   return roasts;
 }
 
-function buildVerdict(summary, names) {
+function buildVerdict(summary, names, tone, options = {}) {
   const winRate = formatPercent(summary.winRate);
   const avg = summary.avgPlacement.toFixed(1);
-  return `${names.me} and ${names.duo} are winning ${winRate} of their arena games together with an average placement of ${avg}. the data suggests ${summary.comfortBias} leans on ${summary.comfortPick}, while riot keeps the augment wheel spicy. small sample size, but the vibe says you are one good roll away from dominance.`;
+  const biasText = summary.comfortBias === "tied"
+    ? `both lean on ${summary.comfortPick}`
+    : `${summary.comfortBias} leans on ${summary.comfortPick}`;
+  const templates = {
+    gentle: [
+      () => `${names.me} and ${names.duo} are winning ${winRate} of their arena games together with an average placement of ${avg}. the data suggests ${biasText}, while riot keeps the augment wheel spicy. small sample size, but the vibe says you are close to a clean run.`,
+      () => `${names.me} and ${names.duo} are sitting at ${winRate} wins with an average placement of ${avg}. the data suggests ${biasText}, and riot provides the occasional plot twist. small sample size, but the climb feels within reach.`
+    ],
+    classic: [
+      () => `${names.me} and ${names.duo} are winning ${winRate} of their arena games together with an average placement of ${avg}. the data suggests ${biasText}, while riot keeps the augment wheel spicy. small sample size, but the vibe says you are one good roll away from dominance.`,
+      () => `${names.me} and ${names.duo} are landing at ${winRate} wins with an average placement of ${avg}. the data suggests ${biasText}, and riot keeps the chaos flowing. small sample size, but the energy says this duo is one streak away.`
+    ],
+    savage: [
+      () => `${names.me} and ${names.duo} are winning ${winRate} of their arena games with an average placement of ${avg}. the data suggests ${biasText}, and riot keeps the augment wheel on hard mode. small sample size, but the comeback arc is still possible.`,
+      () => `${names.me} and ${names.duo} are sitting at ${winRate} wins with an average placement of ${avg}. the data suggests ${biasText}, and riot keeps the chaos dialed up. small sample size, but the next streak could flip the story.`
+    ]
+  };
+  const toneTemplates = templates[tone] || templates.classic;
+  const seed = options.fresh ? null : Math.floor(summary.winRate * 1000) + summary.games * 7 + summary.firstDeaths.duo;
+  const template = pickVariant(toneTemplates, seed);
+  return template ? template() : "";
 }
 
 function buildBlame(summary, names) {
@@ -383,6 +453,9 @@ async function handleDuo(req, env, ctx) {
   const meInput = normalizeName(url.searchParams.get("me"), env.DEFAULT_ME || "hugegamer-EUW");
   const duoInput = normalizeName(url.searchParams.get("duo"), env.DEFAULT_DUO || "MichyeoHEY-EUW");
   const matches = Math.min(50, Math.max(5, safeNumber(url.searchParams.get("matches"), Number(env.DEFAULT_MATCHES) || 25)));
+  const tone = normalizeTone(url.searchParams.get("tone"));
+  const verdictRaw = (url.searchParams.get("verdict") || "auto").trim().toLowerCase();
+  const verdictStyle = verdictRaw === "fresh" || verdictRaw === "manual" ? "fresh" : "auto";
 
   const platform = PLATFORM_BY_REGION[region];
   const regional = REGION_BY_PLATFORM[platform];
@@ -396,12 +469,18 @@ async function handleDuo(req, env, ctx) {
   cacheKeyUrl.searchParams.set("me", meInput.toLowerCase());
   cacheKeyUrl.searchParams.set("duo", duoInput.toLowerCase());
   cacheKeyUrl.searchParams.set("matches", String(matches));
-  cacheKeyUrl.searchParams.set("tone", url.searchParams.get("tone") || "classic");
-  cacheKeyUrl.searchParams.set("verdict", url.searchParams.get("verdict") || "auto");
+  cacheKeyUrl.searchParams.set("tone", tone);
+  cacheKeyUrl.searchParams.set("verdict", "auto");
 
   const cacheKey = new Request(cacheKeyUrl.toString(), req);
   const cached = await cache.match(cacheKey);
   if (cached) {
+    if (verdictStyle === "fresh") {
+      const data = await cached.clone().json();
+      data.meta.source = "cache";
+      data.verdict = buildVerdict(data.summary, data.meta.duo, tone, { fresh: true });
+      return jsonResponse(data, 200, { "Cache-Control": "no-store" });
+    }
     return cached;
   }
 
@@ -469,8 +548,8 @@ async function handleDuo(req, env, ctx) {
   const names = { me: mePlayer.name || meInput, duo: duoPlayer.name || duoInput };
   const summary = buildSummary(stats, names, matches);
   const blame = buildBlame(summary, names);
-  const roasts = buildRoasts(summary, names);
-  const verdict = buildVerdict(summary, names);
+  const roasts = buildRoasts(summary, names, tone);
+  const verdict = buildVerdict(summary, names, tone, { fresh: verdictStyle === "fresh" });
 
   const payload = {
     meta: {
@@ -487,6 +566,11 @@ async function handleDuo(req, env, ctx) {
   };
 
   const headers = { "Cache-Control": `public, max-age=${safeNumber(env.CACHE_TTL_SECONDS, 3600)}` };
+  if (verdictStyle === "fresh") {
+    const cachePayload = { ...payload, verdict: buildVerdict(summary, names, tone, { fresh: false }) };
+    ctx.waitUntil(cache.put(cacheKey, jsonResponse(cachePayload, 200, headers)));
+    return jsonResponse(payload, 200, { "Cache-Control": "no-store" });
+  }
   const response = jsonResponse(payload, 200, headers);
   ctx.waitUntil(cache.put(cacheKey, response.clone()));
   return response;

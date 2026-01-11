@@ -6,7 +6,7 @@ endpoint is wired up.
 ## Configure
 - Set `API_BASE` in `index.html` to your Cloudflare Worker URL.
 - The worker should expose `GET /duo` with query params:
-  - `region`, `me`, `duo`, `matches`, `tone`, `verdict`
+  - `region`, `me`, `duo`, `matches`, `tone`, `verdict` (`auto` or `fresh`)
 - Response shape should follow the `demoData` structure in `index.html`.
 - Inputs can be plain summoner names or Riot IDs (`name#TAG`), including op.gg-style `name-TAG`.
 

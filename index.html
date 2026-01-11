@@ -421,8 +421,8 @@
           <label class="field">
             <span>verdict style</span>
             <select id="verdict-style">
-              <option value="auto" selected>auto verdict</option>
-              <option value="manual">manual only</option>
+              <option value="auto">auto (cached)</option>
+              <option value="fresh" selected>fresh (no cache)</option>
             </select>
           </label>
         </div>
@@ -433,7 +433,7 @@
           <button class="btn" type="reset" id="reset-btn">reset</button>
         </div>
       </form>
-      <div class="hint" id="url-hint">share link: /?me=hugegamer-EUW&duo=MichyeoHEY-EUW&region=euw</div>
+      <div class="hint" id="url-hint">share link: /?me=hugegamer-EUW&duo=MichyeoHEY-EUW&region=euw&verdict=fresh</div>
     </section>
 
     <section class="panel" style="animation-delay: 0.1s;">
@@ -553,7 +553,7 @@
       duo: "MichyeoHEY-EUW",
       matches: "25",
       tone: "classic",
-      verdict: "auto"
+      verdict: "fresh"
     };
 
     const apiStatus = document.getElementById("api-status");
@@ -662,6 +662,12 @@
         }
       }
       return trimmed;
+    }
+
+    function normalizeVerdictStyle(value) {
+      const cleaned = (value || "").trim().toLowerCase();
+      if (cleaned === "fresh" || cleaned === "manual") return "fresh";
+      return "auto";
     }
 
     function escapeHtml(value) {
@@ -884,7 +890,7 @@
         duo: normalizeInput(document.getElementById("summoner-b").value, DEFAULTS.duo),
         matches: document.getElementById("match-count").value,
         tone: document.getElementById("roast-tone").value,
-        verdict: document.getElementById("verdict-style").value
+        verdict: normalizeVerdictStyle(document.getElementById("verdict-style").value)
       };
     }
 
@@ -905,7 +911,7 @@
         duo: url.searchParams.get("duo") || DEFAULTS.duo,
         matches: url.searchParams.get("matches") || DEFAULTS.matches,
         tone: url.searchParams.get("tone") || DEFAULTS.tone,
-        verdict: url.searchParams.get("verdict") || DEFAULTS.verdict
+        verdict: normalizeVerdictStyle(url.searchParams.get("verdict") || DEFAULTS.verdict)
       };
     }
 
