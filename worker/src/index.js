@@ -2875,7 +2875,51 @@ async function handleDebug(req, env, ctx) {
     }
   }
 
-  if (url.searchParams.get("ai") === "roasts") {
+  if (url.searchParams.get("ai") === "bundle") {
+    const tone = normalizeTone(url.searchParams.get("tone"));
+    const meInput = normalizeName(url.searchParams.get("me"), env.DEFAULT_ME || "hugegamer-EUW");
+    const duoInput = normalizeName(url.searchParams.get("duo"), env.DEFAULT_DUO || "MichyeoHEY-EUW");
+    const matches = Math.min(50, Math.max(5, safeNumber(url.searchParams.get("matches"), Number(env.DEFAULT_MATCHES) || 25)));
+    const debugUrl = new URL(url.origin + "/duo");
+    debugUrl.searchParams.set("region", region);
+    debugUrl.searchParams.set("me", meInput);
+    debugUrl.searchParams.set("duo", duoInput);
+    debugUrl.searchParams.set("matches", String(matches));
+    debugUrl.searchParams.set("tone", tone);
+    debugUrl.searchParams.set("verdict", "auto");
+
+    try {
+      const duoResponse = await handleDuo(new Request(debugUrl.toString(), req), env, ctx);
+      const duoData = await duoResponse.json();
+      const insights = duoData.insights || buildFallbackInsights(duoData.summary, duoData.matches || []);
+      const metaStats = insights.meta || null;
+      const roastsAuto = buildRoasts(duoData.summary, duoData.meta.duo, tone, metaStats, insights);
+      const aiBundle = await getAiBundle(
+        duoData.summary,
+        duoData.meta.duo,
+        tone,
+        insights,
+        duoData.matches || [],
+        roastsAuto,
+        env,
+        ctx,
+        url,
+        { debug: true }
+      );
+      payload.aiBundle = {
+        sources: aiBundle.sources,
+        error: aiBundle.error || null,
+        verdict: aiBundle.verdict || null,
+        roasts: aiBundle.roasts || null,
+        moments: Array.isArray(aiBundle.moments) ? aiBundle.moments.slice(0, 3) : null
+      };
+    } catch (error) {
+      payload.aiBundle = {
+        sources: { verdict: "ai-fallback", roasts: "ai-fallback", moments: "ai-fallback" },
+        error: error.message || "ai bundle debug error"
+      };
+    }
+  } else if (url.searchParams.get("ai") === "roasts") {
     const tone = normalizeTone(url.searchParams.get("tone"));
     const meInput = normalizeName(url.searchParams.get("me"), env.DEFAULT_ME || "hugegamer-EUW");
     const duoInput = normalizeName(url.searchParams.get("duo"), env.DEFAULT_DUO || "MichyeoHEY-EUW");
