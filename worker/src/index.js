@@ -631,7 +631,7 @@ async function generateAiVerdict(summary, names, tone, insights, env) {
   const promptPayload = {
     players: [names.me, names.duo],
     tone,
-    arenaContext: "2v2v2v2v2v2v2v2, 8 teams, top 4 is a win, 1st is the crown",
+    arenaContext: "2v2v2v2v2v2v2v2, 8 teams, top 4 is a win, 1st is the top spot",
     facts: {
       games,
       top4Wins: wins,
@@ -680,10 +680,11 @@ async function generateAiVerdict(summary, names, tone, insights, env) {
 
   const system = [
     "You write short, playful verdicts for League of Legends Arena duos.",
-    "Arena is 2v2v2v2 with 8 teams; top 4 is a win; 1st place is the crown.",
+    "Arena is 2v2v2v2 with 8 teams; top 4 is a win; 1st place is the top spot.",
     "Use the provided facts only; do not invent numbers, events, or qualitative claims.",
     "Do not imply stats that are not explicitly provided.",
     "Never mention first deaths, first blood, or 'first death' language.",
+    "Never mention crowns; say wins or first place instead.",
     "Use deaths only if facts.deaths is present.",
     "Tank share indicates damage taken; support share indicates healing + shielding.",
     "2-4 sentences, banter not toxic, no profanity or slurs.",
@@ -776,7 +777,7 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
   const promptPayload = {
     players: [names.me, names.duo],
     tone,
-    arenaContext: "2v2v2v2v2v2v2v2, 8 teams, top 4 is a win, 1st is the crown",
+    arenaContext: "2v2v2v2v2v2v2v2, 8 teams, top 4 is a win, 1st is the top spot",
     facts: {
       games,
       top4Wins: wins,
@@ -867,12 +868,13 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
 
   const system = [
     "You generate 4 roast cards for League of Legends Arena duos.",
-    "Arena is 2v2v2v2 with 8 teams; top 4 is a win; 1st place is the crown.",
+    "Arena is 2v2v2v2 with 8 teams; top 4 is a win; 1st place is the top spot.",
     "Output JSON only with schema: {\"roasts\":[{\"title\":\"...\",\"body\":\"...\"}]}",
     "Titles: 2-4 words, lowercase. Bodies: 1-2 sentences.",
     "Use only the provided facts and numbers; do not invent or infer extra stats.",
     "Do not use comparative claims unless the exact percentage is provided.",
     "Never mention first deaths, first blood, or 'first death' language.",
+    "Never mention crowns; say wins or first place instead.",
     "Use deaths only if facts.deaths is present.",
     "Only mention combat share stats if facts.availability.combatShares is true.",
     "Tank share signals frontline work; support share is healing + shielding. Don't frame tank share as bad unless impact is low.",
@@ -921,7 +923,9 @@ async function generateAiRoasts(summary, names, tone, insights, env) {
 async function generateAiMoments(summary, names, tone, matches, env) {
   const model = env.OPENAI_MODEL || "gpt-4o-mini";
   const items = (matches || []).map((match, index) => {
-    const champs = String(match.champs || "").split(" + ").map((name) => name.trim()).filter(Boolean);
+    const champs = Array.isArray(match.champsTagged)
+      ? match.champsTagged
+      : String(match.champs || "").split(" + ").map((name) => name.trim()).filter(Boolean);
     return {
       index,
       placement: match.placement || 0,
@@ -932,7 +936,7 @@ async function generateAiMoments(summary, names, tone, matches, env) {
   });
   const payload = {
     tone,
-    arenaContext: "2v2v2v2v2v2v2v2, 8 teams, top 4 is a win, 1st is the crown",
+    arenaContext: "2v2v2v2v2v2v2v2, 8 teams, top 4 is a win, 1st is the top spot",
     players: [names.me, names.duo],
     matches: items
   };
@@ -943,7 +947,9 @@ async function generateAiMoments(summary, names, tone, matches, env) {
     "Return one moment per match, in the same order.",
     "Each moment is 2-8 words, lowercase, no profanity, no slurs.",
     "Never mention first deaths, first blood, or 'first death' language.",
+    "Never mention crowns; say wins or first place instead.",
     "Use the provided hint and placement to keep meaning consistent.",
+    "Prefer mentioning a champion name, and include tier tags like [S]/[A] if provided.",
     "Avoid repeating the same phrase across the list."
   ].join(" ");
 
@@ -1131,6 +1137,19 @@ function buildTierMap(data) {
     });
   });
   return { map, total };
+}
+
+function tagMatchChampions(matches, tierInfo) {
+  if (!tierInfo || !tierInfo.map || !Array.isArray(matches)) return matches;
+  return matches.map((match) => {
+    if (Array.isArray(match.champsTagged)) return match;
+    const champs = String(match.champs || "").split(" + ").map((name) => name.trim()).filter(Boolean);
+    const tagged = champs.map((name) => {
+      const tier = tierInfo.map[normalizeChampionKey(name)] || "";
+      return tier ? `${name} [${tier}]` : name;
+    });
+    return { ...match, champsTagged: tagged };
+  });
 }
 
 function buildMetaStats(championCounts, tierInfo) {
@@ -1334,9 +1353,9 @@ function buildHighlight(me, duo, placement, seed) {
   };
 
   if (placement === 1) {
-    add("crown secured");
+    add("top spot secured");
     add("first place sealed");
-    add("crown run completed");
+    add("top spot locked");
   } else if (placement > 0 && placement <= 4) {
     add("top 4 secured");
     add("ticket punched for top 4");
@@ -1388,7 +1407,7 @@ function toneCopy(tone) {
       streakCold: (streak) => `bottom 4 streak hit ${streak}. the lobby has been rough.`,
       champPoolSmall: (count) => `only ${count} champions in rotation. comfort zone cozy.`,
       champPoolWide: (count) => `${count} champions across the scan. variety pack energy.`,
-      crownCount: (firsts) => `${firsts} first-place finishes in the trophy case.`,
+      crownCount: (firsts) => `${firsts} first-place wins on the shelf.`,
       lowItems: (leader, rate) => `${leader} ends ${formatPercent(rate)} of games with 3 or fewer items. the build never shows up.`,
       anvilLead: (leader, rate, champ) => `${leader} runs the anvil economy in ${formatPercent(rate)} of games${champ ? ` on ${champ}` : ""}.`,
       anvilFail: (leader, champ) => `${leader} tried the anvil economy${champ ? ` on ${champ}` : ""} and still went bottom 4. financial advice revoked.`,
@@ -1415,7 +1434,7 @@ function toneCopy(tone) {
       streakCold: (streak) => `bottom 4 streak hit ${streak}. the lobby took turns.`,
       champPoolSmall: (count) => `only ${count} champions in rotation. comfort zone locked.`,
       champPoolWide: (count) => `${count} champs across the scan. variety pack duo.`,
-      crownCount: (firsts) => `${firsts} first-place finishes on the shelf. crown collection growing.`,
+      crownCount: (firsts) => `${firsts} first-place wins on the shelf.`,
       lowItems: (leader, rate) => `${leader} ends ${formatPercent(rate)} of games with 3 or fewer items. the build never showed.`,
       anvilLead: (leader, rate, champ) => `${leader} runs the anvil economy in ${formatPercent(rate)} of games${champ ? ` on ${champ}` : ""}.`,
       anvilFail: (leader, champ) => `${leader} tried the anvil economy${champ ? ` on ${champ}` : ""} and still hit bottom 4. finance diff.`,
@@ -1442,7 +1461,7 @@ function toneCopy(tone) {
       streakCold: (streak) => `bottom 4 streak hit ${streak}. spiral lore unlocked.`,
       champPoolSmall: (count) => `only ${count} champions in rotation. comfort cage secured.`,
       champPoolWide: (count) => `${count} champions across the scan. chaos buffet.`,
-      crownCount: (firsts) => `${firsts} first-place finishes in the cabinet. still room for more.`,
+      crownCount: (firsts) => `${firsts} first-place wins in the cabinet. still room for more.`,
       lowItems: (leader, rate) => `${leader} ends ${formatPercent(rate)} of games with 3 or fewer items. inventory poverty arc.`,
       anvilLead: (leader, rate, champ) => `${leader} runs the anvil economy in ${formatPercent(rate)} of games${champ ? ` on ${champ}` : ""}.`,
       anvilFail: (leader, champ) => `${leader} tried the anvil economy${champ ? ` on ${champ}` : ""} and still went bottom 4. budget nerfed.`,
@@ -1590,7 +1609,7 @@ function buildRoasts(summary, names, tone, metaStats, insights) {
   }
 
   if (summary.firsts >= 2) {
-    addUnique(pool, { title: "crown count", body: copy.crownCount(summary.firsts) });
+    addUnique(pool, { title: "top spot count", body: copy.crownCount(summary.firsts) });
   }
 
   const clutchRoast = { title: "clutch window", body: copy.clutch(summary) };
@@ -1623,7 +1642,7 @@ function buildVerdict(summary, names, tone, options = {}) {
   const firstsCount = Number.isFinite(summary.firsts) ? summary.firsts : 0;
   const firsts = formatFirsts(firstsCount);
   const gamesText = games === 1 ? "1 arena game" : `${games} arena games`;
-  const arenaContext = "arena scoring: top 4 of 8 teams is a win, first place is the crown";
+  const arenaContext = "arena scoring: top 4 of 8 teams is a win, first place is the top spot";
   const samplePrefix = smallSamplePrefix(games);
   const biasText = summary.comfortBias === "tied"
     ? `both lean on ${summary.comfortPick}`
@@ -2104,9 +2123,10 @@ async function handleDuo(req, env, ctx) {
   const names = { me: mePlayer.name || meInput, duo: duoPlayer.name || duoInput };
   const summary = buildSummary(stats, names, matches);
   let metaStats = null;
+  let tierInfo = null;
   try {
     const tierData = await fetchTierList(env, ctx);
-    const tierInfo = buildTierMap(tierData);
+    tierInfo = buildTierMap(tierData);
     metaStats = buildMetaStats(stats.champions, tierInfo);
   } catch (error) {
     metaStats = null;
@@ -2123,11 +2143,12 @@ async function handleDuo(req, env, ctx) {
   let roasts = roastsAuto;
   let momentsSource = "auto";
   let matchesFinal = matchesOut;
+  const matchesForMoments = tagMatchChampions(matchesOut, tierInfo);
   if (verdictStyle === "ai") {
     const [aiVerdict, aiRoasts, aiMoments] = await Promise.all([
       getAiVerdict(summary, names, tone, insights, env, ctx, url),
       getAiRoasts(summary, names, tone, insights, roastsAuto, env, ctx, url),
-      getAiMoments(summary, names, tone, insights, matchesOut, env, ctx, url)
+      getAiMoments(summary, names, tone, insights, matchesForMoments, env, ctx, url)
     ]);
     verdictSource = aiVerdict.source;
     verdict = aiVerdict.verdict;
