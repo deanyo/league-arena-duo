@@ -426,7 +426,8 @@
             <span>verdict style</span>
             <select id="verdict-style">
               <option value="auto">auto (cached)</option>
-              <option value="fresh" selected>fresh (no cache)</option>
+              <option value="fresh">fresh (no cache)</option>
+              <option value="ai" selected>ai (cached)</option>
             </select>
           </label>
         </div>
@@ -437,7 +438,7 @@
           <button class="btn" type="reset" id="reset-btn">reset</button>
         </div>
       </form>
-      <div class="hint" id="url-hint">share link: /?me=hugegamer-EUW&duo=MichyeoHEY-EUW&region=euw&verdict=fresh</div>
+      <div class="hint" id="url-hint">share link: /?me=hugegamer-EUW&duo=MichyeoHEY-EUW&region=euw&verdict=ai</div>
     </section>
 
     <section class="panel" style="animation-delay: 0.1s;">
@@ -557,7 +558,7 @@
       duo: "MichyeoHEY-EUW",
       matches: "25",
       tone: "classic",
-      verdict: "fresh"
+      verdict: "ai"
     };
 
     const apiStatus = document.getElementById("api-status");
@@ -673,6 +674,7 @@
     function normalizeVerdictStyle(value) {
       const cleaned = (value || "").trim().toLowerCase();
       if (cleaned === "fresh" || cleaned === "manual") return "fresh";
+      if (cleaned === "ai") return "ai";
       return "auto";
     }
 
@@ -873,12 +875,19 @@
     function renderMeta(data) {
       const source = data.meta.source || "api";
       const verdictMode = data.meta.verdictSource || normalizeVerdictStyle(document.getElementById("verdict-style").value);
+      const verdictLabel = verdictMode === "fresh"
+        ? "fresh verdict"
+        : verdictMode === "ai" || verdictMode === "ai-cache"
+          ? "ai verdict"
+          : verdictMode === "ai-fallback"
+            ? "fallback verdict"
+            : "";
       let statusText = source === "demo" ? "demo mode" : source === "cache" ? "cached stats" : "live data";
-      if (source === "cache" && verdictMode === "fresh") {
-        statusText = "cached stats · fresh verdict";
+      if (verdictLabel) {
+        statusText = statusText + " · " + verdictLabel;
       }
       setStatus(statusText, source === "demo" ? "status-warn" : "status-ok");
-      const sourceText = source === "cache" && verdictMode === "fresh" ? "cache (fresh verdict)" : source;
+      const sourceText = verdictLabel ? `${source} (${verdictLabel})` : source;
       dataSource.textContent = "data source: " + sourceText;
       duoTitle.innerHTML = formatDuoTitle(data.meta.duo);
       duoSub.textContent = "arena duo report for " + data.meta.duo.region.toUpperCase();

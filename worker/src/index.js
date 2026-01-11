@@ -264,6 +264,123 @@ function refreshCachedRoasts(roasts, summary, names, tone) {
   return roasts.map((roast) => (updates[roast.title] ? { ...roast, body: updates[roast.title] } : roast));
 }
 
+function buildVerdictFingerprint(summary, tone) {
+  const avgPlacement = Number.isFinite(summary.avgPlacement) ? summary.avgPlacement.toFixed(2) : "0.00";
+  return [
+    tone,
+    summary.games || 0,
+    summary.wins || 0,
+    summary.firsts || 0,
+    avgPlacement,
+    summary.firstDeaths?.me || 0,
+    summary.firstDeaths?.duo || 0,
+    summary.unusedUlts?.me || 0,
+    summary.unusedUlts?.duo || 0,
+    String(summary.comfortBias || "").toLowerCase(),
+    String(summary.comfortPick || "").toLowerCase(),
+    summary.comfortPickRate || ""
+  ].join("|");
+}
+
+function collapseWhitespace(text) {
+  return String(text || "").replace(/\s+/g, " ").trim();
+}
+
+async function generateAiVerdict(summary, names, tone, env) {
+  const model = env.OPENAI_MODEL || "gpt-4o-mini";
+  const games = summary.games || 0;
+  const wins = summary.wins || 0;
+  const promptPayload = {
+    players: [names.me, names.duo],
+    tone,
+    arenaContext: "2v2v2v2v2v2v2v2, 8 teams, top 4 is a win, 1st is the crown",
+    games,
+    top4Wins: wins,
+    bottom4Losses: Math.max(games - wins, 0),
+    top4Rate: formatPercent(summary.winRate),
+    firsts: summary.firsts || 0,
+    avgPlacement: Number.isFinite(summary.avgPlacement) ? Number(summary.avgPlacement.toFixed(2)) : 0,
+    firstDeaths: summary.firstDeaths,
+    unusedUlts: summary.unusedUlts,
+    comfortBias: summary.comfortBias,
+    comfortPick: summary.comfortPick
+  };
+
+  const system = [
+    "You write short, playful verdicts for League of Legends Arena duos.",
+    "Arena is 2v2v2v2 with 8 teams; top 4 is a win; 1st place is the crown.",
+    "Use the provided stats only; do not invent numbers or facts.",
+    "2-4 sentences, banter not toxic, no profanity or slurs.",
+    "Always share blame with Riot or RNG in a light way.",
+    "Avoid 'small sample size' unless games < 8."
+  ].join(" ");
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: `Stats JSON:\n${JSON.stringify(promptPayload, null, 2)}` }
+      ],
+      temperature: 0.8,
+      max_tokens: 140
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`openai error: ${response.status} ${text}`);
+  }
+  const data = await response.json();
+  const text = collapseWhitespace(data.choices?.[0]?.message?.content || "");
+  if (!text) {
+    throw new Error("openai empty response");
+  }
+  return text;
+}
+
+async function getAiVerdict(summary, names, tone, env, ctx, url) {
+  if (!env.OPENAI_API_KEY) {
+    return { verdict: buildVerdict(summary, names, tone, { fresh: true }), source: "ai-fallback" };
+  }
+
+  const ttl = safeNumber(env.AI_VERDICT_TTL_SECONDS, 86400);
+  const fingerprint = buildVerdictFingerprint(summary, tone);
+  const cache = caches.default;
+  const cacheUrl = new URL(url.origin + "/verdict/ai");
+  cacheUrl.searchParams.set("key", fingerprint);
+  cacheUrl.searchParams.set("tone", tone);
+  cacheUrl.searchParams.set("me", normalizeName(names.me, "").toLowerCase());
+  cacheUrl.searchParams.set("duo", normalizeName(names.duo, "").toLowerCase());
+  const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
+  const cached = await cache.match(cacheKey);
+  if (cached) {
+    const cachedData = await cached.json();
+    if (cachedData && cachedData.verdict) {
+      return { verdict: cachedData.verdict, source: "ai-cache" };
+    }
+  }
+
+  try {
+    const verdict = await generateAiVerdict(summary, names, tone, env);
+    const cacheResponse = new Response(JSON.stringify({ verdict }), {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": `public, max-age=${ttl}`
+      }
+    });
+    ctx.waitUntil(cache.put(cacheKey, cacheResponse.clone()));
+    return { verdict, source: "ai" };
+  } catch (error) {
+    return { verdict: buildVerdict(summary, names, tone, { fresh: true }), source: "ai-fallback" };
+  }
+}
+
 function normalizeChampionKey(name) {
   return String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -694,7 +811,11 @@ async function handleDuo(req, env, ctx) {
   const matches = Math.min(50, Math.max(5, safeNumber(url.searchParams.get("matches"), Number(env.DEFAULT_MATCHES) || 25)));
   const tone = normalizeTone(url.searchParams.get("tone"));
   const verdictRaw = (url.searchParams.get("verdict") || "auto").trim().toLowerCase();
-  const verdictStyle = verdictRaw === "fresh" || verdictRaw === "manual" ? "fresh" : "auto";
+  const verdictStyle = verdictRaw === "fresh" || verdictRaw === "manual"
+    ? "fresh"
+    : verdictRaw === "ai"
+      ? "ai"
+      : "auto";
 
   const platform = PLATFORM_BY_REGION[region];
   const regional = REGION_BY_PLATFORM[platform];
@@ -716,18 +837,31 @@ async function handleDuo(req, env, ctx) {
   if (cached) {
     const data = normalizeCachedPayload(await cached.clone().json());
     data.meta.source = "cache";
-    data.meta.verdictSource = verdictStyle === "fresh" ? "fresh" : "auto";
     data.roasts = refreshCachedRoasts(data.roasts || [], data.summary, data.meta.duo, tone);
-    data.verdict = buildVerdict(data.summary, data.meta.duo, tone, { fresh: verdictStyle === "fresh" });
+
+    const headers = { "Cache-Control": `public, max-age=${safeNumber(env.CACHE_TTL_SECONDS, 3600)}` };
+    const canonicalVerdict = buildVerdict(data.summary, data.meta.duo, tone, { fresh: false });
+    const canonical = {
+      ...data,
+      verdict: canonicalVerdict,
+      meta: { ...data.meta, verdictSource: "auto" }
+    };
+    ctx.waitUntil(cache.put(cacheKey, jsonResponse(canonical, 200, headers)));
 
     if (verdictStyle === "fresh") {
+      data.meta.verdictSource = "fresh";
+      data.verdict = buildVerdict(data.summary, data.meta.duo, tone, { fresh: true });
       return jsonResponse(data, 200, { "Cache-Control": "no-store" });
     }
 
-    const headers = { "Cache-Control": `public, max-age=${safeNumber(env.CACHE_TTL_SECONDS, 3600)}` };
-    const response = jsonResponse(data, 200, headers);
-    ctx.waitUntil(cache.put(cacheKey, response.clone()));
-    return response;
+    if (verdictStyle === "ai") {
+      const aiVerdict = await getAiVerdict(data.summary, data.meta.duo, tone, env, ctx, url);
+      data.meta.verdictSource = aiVerdict.source;
+      data.verdict = aiVerdict.verdict;
+      return jsonResponse(data, 200, { "Cache-Control": "no-store" });
+    }
+
+    return jsonResponse(canonical, 200, headers);
   }
 
   const mePlayer = await resolvePlayer(meInput, platform, regional, env);
@@ -808,7 +942,15 @@ async function handleDuo(req, env, ctx) {
   }
 
   const roasts = buildRoasts(summary, names, tone, metaStats);
-  const verdict = buildVerdict(summary, names, tone, { fresh: verdictStyle === "fresh" });
+  const headers = { "Cache-Control": `public, max-age=${safeNumber(env.CACHE_TTL_SECONDS, 3600)}` };
+
+  let verdictSource = verdictStyle === "fresh" ? "fresh" : "auto";
+  let verdict = buildVerdict(summary, names, tone, { fresh: verdictStyle === "fresh" });
+  if (verdictStyle === "ai") {
+    const aiVerdict = await getAiVerdict(summary, names, tone, env, ctx, url);
+    verdictSource = aiVerdict.source;
+    verdict = aiVerdict.verdict;
+  }
 
   const payload = {
     meta: {
@@ -816,7 +958,7 @@ async function handleDuo(req, env, ctx) {
       updatedAt: new Date().toISOString(),
       matchCount: matches,
       duo: { me: names.me, duo: names.duo, region },
-      verdictSource: verdictStyle === "fresh" ? "fresh" : "auto"
+      verdictSource
     },
     summary,
     blame,
@@ -825,12 +967,16 @@ async function handleDuo(req, env, ctx) {
     verdict
   };
 
-  const headers = { "Cache-Control": `public, max-age=${safeNumber(env.CACHE_TTL_SECONDS, 3600)}` };
-  if (verdictStyle === "fresh") {
-    const cachePayload = { ...payload, verdict: buildVerdict(summary, names, tone, { fresh: false }) };
+  if (verdictStyle === "fresh" || verdictStyle === "ai") {
+    const cachePayload = {
+      ...payload,
+      verdict: buildVerdict(summary, names, tone, { fresh: false }),
+      meta: { ...payload.meta, verdictSource: "auto" }
+    };
     ctx.waitUntil(cache.put(cacheKey, jsonResponse(cachePayload, 200, headers)));
     return jsonResponse(payload, 200, { "Cache-Control": "no-store" });
   }
+
   const response = jsonResponse(payload, 200, headers);
   ctx.waitUntil(cache.put(cacheKey, response.clone()));
   return response;

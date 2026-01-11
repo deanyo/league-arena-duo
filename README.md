@@ -6,7 +6,7 @@ endpoint is wired up.
 ## Configure
 - Set `API_BASE` in `index.html` to your Cloudflare Worker URL.
 - The worker should expose `GET /duo` with query params:
-  - `region`, `me`, `duo`, `matches`, `tone`, `verdict` (`auto` or `fresh`)
+  - `region`, `me`, `duo`, `matches`, `tone`, `verdict` (`auto`, `fresh`, or `ai`)
 - Response shape should follow the `demoData` structure in `index.html`.
 - Inputs can be plain summoner names or Riot IDs (`name#TAG`), including op.gg-style `name-TAG`.
 
@@ -48,6 +48,15 @@ Optional defaults (already in `worker/wrangler.toml`):
 - `DEFAULT_DUO`
 - `DEFAULT_MATCHES`
 - `CACHE_TTL_SECONDS`
+- `AI_VERDICT_TTL_SECONDS`
+- `OPENAI_MODEL`
+
+### AI verdicts (optional)
+Set an OpenAI key to enable `verdict=ai`:
+```bash
+cd worker
+wrangler secret put OPENAI_API_KEY
+```
 
 ### Local dev
 ```bash
