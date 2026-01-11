@@ -24,6 +24,13 @@
       --warn: #f0c27b;
       --danger: #e965a5;
       --shadow: rgba(0, 0, 0, 0.35);
+      --tier-poor: #9d9d9d;
+      --tier-common: #ffffff;
+      --tier-uncommon: #1eff00;
+      --tier-rare: #0070dd;
+      --tier-epic: #a335ee;
+      --tier-legendary: #ff8000;
+      --tier-artifact: #e6cc80;
     }
     * { box-sizing: border-box; }
     body {
@@ -334,22 +341,13 @@
     .champ-name {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 4px;
     }
-    .tier-badge {
-      padding: 2px 6px;
-      border-radius: 999px;
-      border: 1px solid var(--line);
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      margin-left: 4px;
-    }
-    .tier-s { color: var(--accent); border-color: var(--accent); }
-    .tier-a { color: var(--accent-3); border-color: var(--accent-3); }
-    .tier-b { color: var(--warn); border-color: var(--warn); }
-    .tier-c { color: var(--danger); border-color: var(--danger); }
-    .tier-d { color: var(--muted); border-color: var(--muted); }
+    .champ-name.tier-s { color: var(--tier-legendary); }
+    .champ-name.tier-a { color: var(--tier-epic); }
+    .champ-name.tier-b { color: var(--tier-rare); }
+    .champ-name.tier-c { color: var(--tier-uncommon); }
+    .champ-name.tier-d { color: var(--tier-poor); }
     .verdict {
       font-size: 14px;
       line-height: 1.7;
@@ -867,15 +865,9 @@
           container.appendChild(document.createTextNode(" + "));
         }
         const champSpan = document.createElement("span");
-        champSpan.className = "champ-name";
-        champSpan.textContent = champion;
         const tier = getChampionTier(champion);
-        if (tier) {
-          const badge = document.createElement("span");
-          badge.className = "tier-badge tier-" + tier.toLowerCase();
-          badge.textContent = tier;
-          champSpan.appendChild(badge);
-        }
+        champSpan.className = tier ? "champ-name tier-" + tier.toLowerCase() : "champ-name";
+        champSpan.textContent = tier ? `${champion} [${tier}]` : champion;
         container.appendChild(champSpan);
       });
     }
@@ -961,12 +953,8 @@
           target.appendChild(span);
         } else {
           const span = document.createElement("span");
-          span.className = "champ-name";
-          span.textContent = fragment;
-          const badge = document.createElement("span");
-          badge.className = "tier-badge tier-" + match.tier.toLowerCase();
-          badge.textContent = match.tier;
-          span.appendChild(badge);
+          span.className = "champ-name tier-" + match.tier.toLowerCase();
+          span.textContent = `${fragment} [${match.tier}]`;
           target.appendChild(span);
         }
         cursor = match.index + match.length;
