@@ -1,6 +1,7 @@
 # league-arena-duo
 
 [![pages-build-deployment](https://github.com/deanyo/league-arena-duo/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/deanyo/league-arena-duo/actions/workflows/pages/pages-build-deployment)
+![WIP](https://img.shields.io/badge/status-WIP-yellow)
 
 Arena duo analyzer and roast generator for League of Legends.
 
